@@ -82,10 +82,33 @@ def buscar_entrada(palabra, diccionario=None):
 
 
 # ==========================================
+# RESULTADOS
+# ==========================================
+# Las funciones de aprender y olvidar NO imprimen ni preguntan nada:
+# devuelven un resultado y quien las llama (HEFESTO, GAIA...) decide
+# cómo comunicarlo. Así APOLLO sirve a cualquier inteligencia.
+#
+# Un resultado es un diccionario con un "estado" y datos extra:
+#     {"estado": "aprendida", "sujeto": "sensor", ...}
+
+def resultado(estado, **datos):
+    return {"estado": estado, **datos}
+
+
+# ==========================================
 # APRENDER PALABRA
 # ==========================================
 
 def aprender_palabra(palabra, asociacion):
+    """
+    Aprende 'palabra es asociación' (por ejemplo, 'raspberry pi es una computadora').
+
+    Estados posibles:
+        "nueva"     aprendió una palabra que no conocía
+        "asociada"  la palabra ya existía y ganó una asociación
+        "ya_sabia"  ya conocía esa asociación
+        "vacio"     faltan datos
+    """
 
     diccionario = cargar_diccionario()
 
@@ -93,8 +116,9 @@ def aprender_palabra(palabra, asociacion):
     asociacion = asociacion.strip()
 
     if not palabra or not asociacion:
-        print("HEFESTO: No puedo aprender términos vacíos.")
-        return
+        return resultado("vacio")
+
+    datos = {"palabra": palabra, "asociacion": asociacion}
 
     for entrada in diccionario["palabras"]:
 
@@ -102,74 +126,74 @@ def aprender_palabra(palabra, asociacion):
 
             entrada.setdefault("asociaciones", [])
 
-            # Evitar asociaciones duplicadas.
-            if asociacion not in entrada["asociaciones"]:
+            ya_estaba = any(
+                normalizar_concepto(a) == normalizar_concepto(asociacion)
+                for a in entrada["asociaciones"]
+                if isinstance(a, str)
+            )
 
-                entrada["asociaciones"].append(asociacion)
+            if ya_estaba:
+                return resultado("ya_sabia", **datos)
 
-                guardar_diccionario(diccionario)
+            entrada["asociaciones"].append(asociacion)
+            guardar_diccionario(diccionario)
 
-                print(
-                    f"HEFESTO: Aprendí que {palabra} "
-                    f"está relacionado con {asociacion}."
-                )
+            return resultado("asociada", **datos)
 
-            else:
-                print("HEFESTO: Ya conocía esa asociación.")
-
-            return
-
-    nueva_palabra = {
+    diccionario["palabras"].append({
         "palabra": palabra,
         "asociaciones": [asociacion]
-    }
-
-    diccionario["palabras"].append(nueva_palabra)
+    })
 
     guardar_diccionario(diccionario)
 
-    print(
-        f"HEFESTO: Aprendí la palabra {palabra} "
-        f"y su asociación con {asociacion}."
-    )
+    return resultado("nueva", **datos)
 
 
 def aprender_sinonimo(palabra, sinonimo):
+    """
+    Aprende que 'sinonimo' es otro nombre de 'palabra'.
+
+    Estados posibles:
+        "aprendido"      lo guardó
+        "ya_sabia"       ya eran el mismo concepto
+        "ya_registrado"  ese nombre ya es otro concepto
+        "desconocido"    no conoce el concepto principal
+        "iguales"        los dos términos son el mismo
+        "vacio"          faltan datos
+    """
     diccionario = cargar_diccionario()
 
     palabra = limpiar_concepto(palabra)
     sinonimo = limpiar_concepto(sinonimo)
 
     if not palabra or not sinonimo:
-        print("HEFESTO: No puedo aprender términos vacíos.")
-        return
+        return resultado("vacio")
+
+    datos = {"palabra": palabra, "sinonimo": sinonimo}
 
     if normalizar_concepto(palabra) == normalizar_concepto(sinonimo):
-        print("HEFESTO: Ambos términos son iguales.")
-        return
+        return resultado("iguales", **datos)
 
     # Buscar DENTRO del mismo diccionario que vamos a guardar.
     entrada = buscar_entrada(palabra, diccionario)
 
     if entrada is None:
-        print(f"HEFESTO: No conozco el concepto '{palabra}'.")
-        return
+        return resultado("desconocido", **datos)
 
-    if buscar_entrada(sinonimo, diccionario) is not None:
-        print(f"HEFESTO: '{sinonimo}' ya está registrado.")
-        return
+    otra = buscar_entrada(sinonimo, diccionario)
 
-    if "sinonimos" not in entrada:
-        entrada["sinonimos"] = []
+    if otra is entrada:
+        return resultado("ya_sabia", **datos)     # ya eran el mismo concepto
 
-    entrada["sinonimos"].append(sinonimo)
+    if otra is not None:
+        return resultado("ya_registrado", **datos)
+
+    entrada.setdefault("sinonimos", []).append(sinonimo)
 
     guardar_diccionario(diccionario)
 
-    print(
-        f"HEFESTO: Aprendí que '{sinonimo}' "
-        f"es sinónimo de '{entrada['palabra']}'."
-    )
+    return resultado("aprendido", palabra=entrada["palabra"], sinonimo=sinonimo)
 
 
 # ==========================================
@@ -204,15 +228,27 @@ def es_negada(relacion):
     return isinstance(relacion, dict) and bool(relacion.get("negada", False))
 
 
-def aprender_relacion(sujeto, relacion, objeto, negada=False):
+def aprender_relacion(sujeto, relacion, objeto, negada=False, reemplazar=False):
     """
     Aprende 'sujeto relación objeto'.
     Con negada=True aprende lo contrario: 'sujeto NO relación objeto'.
 
-    Detecta contradicciones:
-    - Lo opuesto ya estaba guardado ("sí mide" vs "no mide").
+    Si contradice algo que ya sabía, NO guarda nada y devuelve el estado
+    "contradiccion" con la lista de conflictos. Quien la llamó decide
+    (por ejemplo, preguntándote) y, si quiere reemplazar, vuelve a
+    llamarla con reemplazar=True.
+
+    Estados posibles:
+        "aprendida"           la guardó (y "reemplazadas" dice qué quitó)
+        "ya_sabia"            ya la conocía
+        "contradiccion"       choca con "conflictos"; no guardó nada
+        "relacion_invalida"   no conoce ese verbo
+        "mismo_concepto"      sujeto y objeto son lo mismo
+        "vacio"               faltan datos
+
+    Hay dos tipos de contradicción:
+    - Lo opuesto ya estaba guardado ("sí mide" contra "no mide").
     - Una relación única ya tenía otro objetivo ("pertenece a").
-    En ambos casos pregunta si debe reemplazar lo anterior.
     """
 
     diccionario = cargar_diccionario()
@@ -223,28 +259,23 @@ def aprender_relacion(sujeto, relacion, objeto, negada=False):
     relacion = normalizar_relacion(relacion)
     objeto = limpiar_concepto(objeto)
 
-    sujeto_norm = normalizar_concepto(sujeto)
-    objeto_norm = normalizar_concepto(objeto)
-
-    no = "NO " if negada else ""
-
     if not sujeto or not objeto or not relacion:
-        print("HEFESTO: La relación contiene datos vacíos.")
-        return
+        return resultado("vacio")
+
+    datos = {
+        "sujeto": sujeto,
+        "relacion": relacion,
+        "objeto": objeto,
+        "negada": negada
+    }
 
     if relacion not in RELACIONES_VALIDAS:
-        print(
-            f"HEFESTO: Todavía no reconozco la relación "
-            f"'{relacion}'. No la guardaré."
-        )
-        return
+        return resultado("relacion_invalida", **datos)
 
-    if sujeto_norm == objeto_norm:
-        print(
-            "HEFESTO: El sujeto y el objeto son iguales. "
-            "Revisa esa relación."
-        )
-        return
+    objeto_norm = normalizar_concepto(objeto)
+
+    if normalizar_concepto(sujeto) == objeto_norm:
+        return resultado("mismo_concepto", **datos)
 
     palabras = diccionario.get("palabras", [])
 
@@ -256,7 +287,6 @@ def aprender_relacion(sujeto, relacion, objeto, negada=False):
             continue
 
         if buscar_entrada(sujeto, {"palabras": [entrada]}) is not None:
-
             entrada_sujeto = entrada
             break
 
@@ -277,7 +307,7 @@ def aprender_relacion(sujeto, relacion, objeto, negada=False):
 
     entrada_sujeto["relaciones"] = relaciones
 
-    a_reemplazar = []
+    conflictos = []
 
     for existente in relaciones:
 
@@ -301,44 +331,39 @@ def aprender_relacion(sujeto, relacion, objeto, negada=False):
 
         # 1. Ya lo sabía exactamente igual.
         if mismo_objetivo and mismo_sentido:
-            print("HEFESTO: Ya conocía esa relación.")
-            return
+            return resultado("ya_sabia", **datos)
 
-        # 2. Contradicción directa: antes dijiste lo contrario.
-        if mismo_objetivo and not mismo_sentido:
-
-            antes = "NO " if es_negada(existente) else ""
-
-            print(
-                f"HEFESTO: Esto contradice algo que ya sé: "
-                f"{sujeto} {antes}{relacion} {objetivo_existente}."
+        # 2. Lo opuesto, o 3. una relación única con otro objetivo.
+        contradice = (
+            (mismo_objetivo and not mismo_sentido)
+            or (
+                relacion in RELACIONES_UNICAS
+                and not negada
+                and not es_negada(existente)
             )
+        )
 
-            a_reemplazar.append(existente)
+        if contradice:
+            conflictos.append(existente)
 
-        # 3. Relación única con otro objetivo (pertenece a).
-        elif relacion in RELACIONES_UNICAS and not negada and not es_negada(existente):
+    if conflictos and not reemplazar:
 
-            print(
-                f"HEFESTO: Esto contradice algo que ya sé: "
-                f"{sujeto} {relacion} {objetivo_existente}, "
-                f"y algo solo puede '{relacion}' una cosa."
-            )
+        return resultado(
+            "contradiccion",
+            conflictos=[
+                {
+                    "sujeto": sujeto,
+                    "relacion": relacion,
+                    "objeto": c["objetivo"],
+                    "negada": es_negada(c)
+                }
+                for c in conflictos
+            ],
+            **datos
+        )
 
-            a_reemplazar.append(existente)
-
-    if a_reemplazar:
-
-        respuesta = input(
-            "¿Reemplazo lo que sabía por lo nuevo? (s/n): "
-        ).strip().lower()
-
-        if respuesta != "s":
-            print("HEFESTO: Me quedo con lo que ya sabía.")
-            return
-
-        for existente in a_reemplazar:
-            relaciones.remove(existente)
+    for existente in conflictos:
+        relaciones.remove(existente)
 
     nueva = {"relacion": relacion, "objetivo": objeto}
 
@@ -349,10 +374,7 @@ def aprender_relacion(sujeto, relacion, objeto, negada=False):
 
     guardar_diccionario(diccionario)
 
-    print(
-        f"HEFESTO: Aprendí la relación "
-        f"{sujeto} → {no}{relacion} → {objeto}."
-    )
+    return resultado("aprendida", reemplazadas=len(conflictos), **datos)
 
 
 def buscar_relaciones(sujeto, objeto=None, negadas=False):

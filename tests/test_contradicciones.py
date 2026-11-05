@@ -16,11 +16,6 @@ def diccionario_temporal(tmp_path, monkeypatch):
     monkeypatch.setattr(apollo, "ARCHIVO_DICCIONARIO", str(archivo))
 
 
-def responder_con(monkeypatch, respuesta):
-    """Simula que el usuario contesta 's' o 'n' a una pregunta."""
-    monkeypatch.setattr("builtins.input", lambda _: respuesta)
-
-
 # ==========================================
 # ENTENDER EL "NO"
 # ==========================================
@@ -47,46 +42,56 @@ def test_negacion_no_se_mezcla_con_afirmaciones():
 # ==========================================
 # CONTRADICCIONES
 # ==========================================
+# APOLLO no pregunta: avisa la contradicción y no guarda nada.
+# Quien lo llama decide y, si quiere, vuelve a pedirlo con reemplazar=True.
 
-def test_contradiccion_reemplaza_si_aceptas(monkeypatch):
+def test_contradiccion_no_guarda_nada_sola():
     apollo.aprender_relacion("sensor", "mide", "presión")
 
-    responder_con(monkeypatch, "s")
-    apollo.aprender_relacion("sensor", "mide", "presión", negada=True)
+    r = apollo.aprender_relacion("sensor", "mide", "presión", negada=True)
 
-    assert apollo.buscar_relaciones("sensor") == []
-    assert len(apollo.buscar_relaciones("sensor", negadas=True)) == 1
-
-
-def test_contradiccion_conserva_si_rechazas(monkeypatch):
-    apollo.aprender_relacion("sensor", "mide", "presión")
-
-    responder_con(monkeypatch, "n")
-    apollo.aprender_relacion("sensor", "mide", "presión", negada=True)
-
+    assert r["estado"] == "contradiccion"
+    assert r["conflictos"][0]["negada"] is False
     assert len(apollo.buscar_relaciones("sensor")) == 1
     assert apollo.buscar_relaciones("sensor", negadas=True) == []
 
 
-def test_relacion_unica_detecta_contradiccion(monkeypatch):
+def test_contradiccion_reemplaza_si_se_pide():
+    apollo.aprender_relacion("sensor", "mide", "presión")
+
+    r = apollo.aprender_relacion(
+        "sensor", "mide", "presión", negada=True, reemplazar=True
+    )
+
+    assert r["estado"] == "aprendida"
+    assert r["reemplazadas"] == 1
+    assert apollo.buscar_relaciones("sensor") == []
+    assert len(apollo.buscar_relaciones("sensor", negadas=True)) == 1
+
+
+def test_relacion_unica_detecta_contradiccion():
     apollo.aprender_relacion("sensor", "pertenece a", "rover")
 
-    responder_con(monkeypatch, "s")
-    apollo.aprender_relacion("sensor", "pertenece a", "dron")
+    r = apollo.aprender_relacion("sensor", "pertenece a", "dron")
+
+    assert r["estado"] == "contradiccion"
+    assert r["conflictos"][0]["objeto"] == "rover"
+
+
+def test_relacion_unica_reemplaza():
+    apollo.aprender_relacion("sensor", "pertenece a", "rover")
+    apollo.aprender_relacion("sensor", "pertenece a", "dron", reemplazar=True)
 
     objetivos = [r["objetivo"] for r in apollo.buscar_relaciones("sensor")]
     assert objetivos == ["dron"]
 
 
-def test_relacion_multiple_no_pregunta(monkeypatch):
-    def no_deberia_preguntar(_):
-        raise AssertionError("No debía preguntar nada")
-
-    monkeypatch.setattr("builtins.input", no_deberia_preguntar)
-
+def test_relacion_multiple_no_es_contradiccion():
     apollo.aprender_relacion("sensor", "mide", "temperatura")
-    apollo.aprender_relacion("sensor", "mide", "humedad")
 
+    r = apollo.aprender_relacion("sensor", "mide", "humedad")
+
+    assert r["estado"] == "aprendida"
     assert len(apollo.buscar_relaciones("sensor")) == 2
 
 

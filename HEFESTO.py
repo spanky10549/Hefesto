@@ -807,6 +807,72 @@ def resolver_concepto(texto):
 
 
 # ==========================================
+# APRENDER: CÓMO DECIRLO
+# ==========================================
+# APOLLO devuelve un resultado con un "estado"; aquí se traduce
+# cada estado a una frase. Si mañana HEFESTO habla por voz o en
+# una página web, solo cambia esta parte, no APOLLO.
+
+def flecha(r):
+    """'sensor → NO mide → humedad'"""
+    no = "NO " if r.get("negada") else ""
+    return f"{r['sujeto']} → {no}{r['relacion']} → {r['objeto']}"
+
+
+MENSAJES = {
+    # aprender_palabra
+    "nueva": "Aprendí la palabra {palabra} y su asociación con {asociacion}.",
+    "asociada": "Aprendí que {palabra} está relacionado con {asociacion}.",
+    # aprender_sinonimo
+    "aprendido": "Aprendí que '{sinonimo}' es sinónimo de '{palabra}'.",
+    "ya_registrado": "'{sinonimo}' ya está registrado.",
+    "desconocido": "No conozco el concepto '{palabra}'. Enséñamelo primero.",
+    "iguales": "Ambos términos son iguales.",
+    # aprender_relacion
+    "aprendida": "Aprendí la relación {flecha}.",
+    "relacion_invalida": "Todavía no reconozco la relación '{relacion}'. No la guardaré.",
+    "mismo_concepto": "El sujeto y el objeto son iguales. Revisa esa relación.",
+    # comunes
+    "ya_sabia": "Ya lo sabía.",
+    "vacio": "No puedo aprender términos vacíos.",
+}
+
+
+def anunciar(r):
+    """Dice en voz de HEFESTO el resultado de aprender algo."""
+    datos = dict(r)
+
+    if "relacion" in r and "sujeto" in r:
+        datos["flecha"] = flecha(r)
+
+    plantilla = MENSAJES.get(r["estado"], "Listo ({estado}).")
+    print("HEFESTO: " + plantilla.format(**datos))
+
+
+def aprender_relacion_conversando(sujeto, relacion, objeto, negada=False):
+    """
+    Pide a APOLLO aprender una relación. Si hay una contradicción,
+    pregunta al usuario y, si acepta, le pide a APOLLO reemplazar.
+    """
+    r = aprender_relacion(sujeto, relacion, objeto, negada)
+
+    if r["estado"] != "contradiccion":
+        anunciar(r)
+        return
+
+    print("HEFESTO: Esto contradice algo que ya sé:")
+
+    for conflicto in r["conflictos"]:
+        print(f"  {flecha(conflicto)}")
+
+    if not confirmar(f"¿Lo cambio por {flecha(r)}?"):
+        print("HEFESTO: Me quedo con lo que ya sabía.")
+        return
+
+    anunciar(aprender_relacion(sujeto, relacion, objeto, negada, reemplazar=True))
+
+
+# ==========================================
 # OLVIDAR
 # ==========================================
 
@@ -1359,10 +1425,7 @@ def iniciar_hefesto():
 
                 palabra, sinonimo = contenido.split(separador, 1)
 
-                aprender_sinonimo(
-                    palabra.strip(),
-                    sinonimo.strip()
-                )
+                anunciar(aprender_sinonimo(palabra.strip(), sinonimo.strip()))
 
             else:
 
@@ -1381,7 +1444,7 @@ def iniciar_hefesto():
 
                     sujeto, relacion, objeto, negada = resultado
 
-                    aprender_relacion(sujeto, relacion, objeto, negada)
+                    aprender_relacion_conversando(sujeto, relacion, objeto, negada)
 
                 else:
 
@@ -1408,7 +1471,7 @@ def iniciar_hefesto():
                     palabra = partes[0].strip()
                     asociacion = partes[1].strip()
 
-                    aprender_palabra(palabra, asociacion)
+                    anunciar(aprender_palabra(palabra, asociacion))
 
         # ======================================
         # RELACIONES INVERSAS: quién mide X
