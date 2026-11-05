@@ -144,3 +144,28 @@ def test_genera_preguntas_de_cada_relacion():
     assert preguntas["con qué se comunica"] == "se comunica con"
     assert preguntas["a qué pertenece"] == "pertenece a"
     assert preguntas["de qué depende"] == "depende de"
+
+
+# ==========================================
+# SINGULAR PARA MOSTRAR
+# ==========================================
+
+from apollo.lenguaje import forma_singular
+
+
+@pytest.mark.parametrize("texto, singular", [
+    ("Las Aves", "ave"),
+    ("máquinas", "máquina"),
+    ("pingüinos", "pingüino"),
+    ("camiones", "camión"),
+    ("imágenes", "imagen"),
+    ("luces", "luz"),
+    ("redes neuronales", "red neuronal"),
+    ("sensores de temperatura", "sensor de temperatura"),
+    ("cámaras de fotos", "cámara de fotos"),
+    ("raspberry pi", "raspberry pi"),
+    ("gps", "gps"),
+    ("análisis", "análisis"),
+])
+def test_forma_singular(texto, singular):
+    assert forma_singular(texto) == singular

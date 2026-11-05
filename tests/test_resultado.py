@@ -87,7 +87,8 @@ def test_relacion_aprendida():
     r = apollo.aprender_relacion("los sensores", "miden", "la temperatura")
 
     assert r["estado"] == "aprendida"
-    assert (r["sujeto"], r["relacion"], r["objeto"]) == ("sensores", "mide", "temperatura")
+    # El sujeto se guarda en singular.
+    assert (r["sujeto"], r["relacion"], r["objeto"]) == ("sensor", "mide", "temperatura")
 
 
 @pytest.mark.parametrize("sujeto, relacion, objeto, estado", [

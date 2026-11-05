@@ -17,6 +17,7 @@ from apollo.lenguaje import (
     quitar_signos,
     expandir_contracciones,
     limpiar_concepto,
+    forma_singular,
     normalizar_concepto,
     normalizar_relacion,
     formas_de_relacion,
@@ -112,7 +113,7 @@ def aprender_palabra(palabra, asociacion):
 
     diccionario = cargar_diccionario()
 
-    palabra = limpiar_concepto(palabra)
+    palabra = forma_singular(palabra)
     asociacion = asociacion.strip()
 
     if not palabra or not asociacion:
@@ -255,9 +256,12 @@ def aprender_relacion(sujeto, relacion, objeto, negada=False, reemplazar=False):
 
     # Guardamos la versión limpia (con acentos) y comparamos
     # con la versión normalizada (sin acentos ni plurales).
-    sujeto = limpiar_concepto(sujeto)
+    # El sujeto siempre en singular ("las aves" → "ave").
+    # El objeto solo si es una categoría ("son máquinas" → "máquina");
+    # en lo demás se respeta ("tiene plumas" se queda así).
+    sujeto = forma_singular(sujeto)
     relacion = normalizar_relacion(relacion)
-    objeto = limpiar_concepto(objeto)
+    objeto = forma_singular(objeto) if relacion == "es" else limpiar_concepto(objeto)
 
     if not sujeto or not objeto or not relacion:
         return resultado("vacio")
@@ -866,3 +870,99 @@ def extraer_relacion_con_negacion(frase, incluir_es=False):
         return None
 
     return resultado + (False,)
+
+
+# ==========================================
+# ORDENAR EL DICCIONARIO
+# ==========================================
+
+def _unir_sin_repetir(destino, nuevos, clave):
+    """Agrega a 'destino' los elementos de 'nuevos' que no estén (según 'clave')."""
+    vistos = {clave(x) for x in destino}
+
+    for x in nuevos:
+        if clave(x) not in vistos:
+            destino.append(x)
+            vistos.add(clave(x))
+
+
+def ordenar_diccionario():
+    """
+    Pone el diccionario en orden:
+    - Une las entradas repetidas del mismo concepto ("sensor" y "sensores").
+    - Pasa los nombres de los conceptos a singular ("aves" → "ave").
+    - Quita asociaciones, sinónimos y relaciones duplicadas.
+
+    No borra conocimiento: solo lo junta. Devuelve un resultado con
+    "unidas" (entradas que se juntaron) y "renombradas" (cambios de nombre).
+    """
+    diccionario = cargar_diccionario()
+
+    grupos = {}       # concepto normalizado → entrada final
+    orden = []
+    unidas = 0
+    renombradas = []
+
+    for entrada in diccionario["palabras"]:
+
+        if not isinstance(entrada, dict) or not entrada.get("palabra"):
+            continue
+
+        clave = normalizar_concepto(entrada["palabra"])
+
+        if clave not in grupos:
+
+            nombre = forma_singular(entrada["palabra"])
+
+            if nombre != entrada["palabra"]:
+                renombradas.append((entrada["palabra"], nombre))
+
+            grupos[clave] = {
+                "palabra": nombre,
+                "asociaciones": [],
+                "sinonimos": [],
+                "relaciones": []
+            }
+            orden.append(clave)
+
+        else:
+            unidas += 1
+
+        final = grupos[clave]
+
+        _unir_sin_repetir(
+            final["asociaciones"],
+            [a for a in entrada.get("asociaciones", []) if isinstance(a, str)],
+            normalizar_concepto
+        )
+        _unir_sin_repetir(
+            final["sinonimos"],
+            [x for x in entrada.get("sinonimos", []) if isinstance(x, str)],
+            normalizar_concepto
+        )
+        _unir_sin_repetir(
+            final["relaciones"],
+            [r for r in entrada.get("relaciones", []) if isinstance(r, dict)],
+            lambda r: (
+                normalizar_relacion(r.get("relacion", "")),
+                normalizar_concepto(r.get("objetivo", "")),
+                es_negada(r)
+            )
+        )
+
+    # Las categorías ("es") también van en singular.
+    for final in grupos.values():
+        for r in final["relaciones"]:
+            if normalizar_relacion(r.get("relacion", "")) == "es":
+                r["objetivo"] = forma_singular(r["objetivo"])
+
+        # No guardar listas vacías de más.
+        for campo in ("sinonimos", "relaciones"):
+            if not final[campo]:
+                del final[campo]
+
+    diccionario["palabras"] = [grupos[clave] for clave in orden]
+
+    guardar_diccionario(diccionario)
+
+    return resultado("ordenado", unidas=unidas, renombradas=renombradas)

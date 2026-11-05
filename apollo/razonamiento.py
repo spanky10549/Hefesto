@@ -22,6 +22,7 @@ from apollo.conocimiento import (
 )
 
 from apollo.lenguaje import (
+    forma_singular,
     limpiar_concepto,
     normalizar_concepto,
     normalizar_relacion
@@ -89,7 +90,7 @@ def categorias_directas(concepto, diccionario=None):
 
         for asociacion in entrada.get("asociaciones", []):
             if isinstance(asociacion, str):
-                categorias.append(limpiar_concepto(asociacion))
+                categorias.append(forma_singular(asociacion))
 
         for relacion in entrada.get("relaciones", []):
             if (
@@ -98,7 +99,7 @@ def categorias_directas(concepto, diccionario=None):
                 and normalizar_relacion(relacion.get("relacion", "")) == "es"
                 and not es_negada(relacion)
             ):
-                categorias.append(limpiar_concepto(relacion["objetivo"]))
+                categorias.append(forma_singular(relacion["objetivo"]))
 
     # Quitar vacíos y repetidos.
     unicas = {}

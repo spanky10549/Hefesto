@@ -130,6 +130,72 @@ def singularizar(palabra):
 
 
 # ==========================================
+# SINGULAR PARA MOSTRAR (CON ACENTOS)
+# ==========================================
+
+# Después de estas palabras, lo que sigue es un complemento y no se toca:
+# "sensores de temperatura" → "sensor de temperatura".
+PREPOSICIONES = {"de", "del", "con", "para", "a", "en", "por", "sin", "sobre"}
+
+VOCALES_CON_ACENTO = "áéíóú"
+
+
+def singular_con_acentos(palabra):
+    """
+    Como singularizar, pero conserva acentos y los corrige donde el
+    singular los gana o los pierde:
+
+        máquinas  → máquina
+        camiones  → camión     (gana acento)
+        imágenes  → imagen     (pierde acento)
+        pingüinos → pingüino
+    """
+    base = quitar_acentos(palabra)
+    singular = singularizar(base)
+
+    if singular == base:
+        return palabra
+
+    if base.startswith(singular):
+        # Caso normal: solo se quitó el final ("s" o "es").
+        resultado = palabra[:len(singular)]
+    else:
+        # luces → luz: cambió la última letra.
+        resultado = palabra[:len(singular) - 1] + singular[-1]
+
+    # -iones → -ión
+    if resultado.endswith("ion"):
+        resultado = resultado[:-3] + "ión"
+
+    # imágenes → imagen, exámenes → examen, jóvenes → joven
+    elif resultado.endswith("en") and any(v in resultado for v in VOCALES_CON_ACENTO):
+        resultado = quitar_acentos(resultado)
+
+    return resultado
+
+
+def forma_singular(concepto):
+    """
+    Pasa un concepto a singular para guardarlo y mostrarlo bonito.
+
+        "Las Aves"                → "ave"
+        "redes neuronales"        → "red neuronal"
+        "sensores de temperatura" → "sensor de temperatura"
+        "cámaras de fotos"        → "cámara de fotos"
+    """
+    palabras = limpiar_concepto(concepto).split()
+
+    for i, palabra in enumerate(palabras):
+
+        if quitar_acentos(palabra) in PREPOSICIONES:
+            break   # lo demás es complemento
+
+        palabras[i] = singular_con_acentos(palabra)
+
+    return " ".join(palabras)
+
+
+# ==========================================
 # NORMALIZAR CONCEPTOS
 # ==========================================
 

@@ -28,7 +28,8 @@ from apollo.conocimiento import (
     olvidar_categoria,
     olvidar_sinonimo,
     olvidar_concepto,
-    extraer_relacion_con_negacion
+    extraer_relacion_con_negacion,
+    ordenar_diccionario
 )
 
 from apollo.lenguaje import (
@@ -1157,6 +1158,7 @@ HEFESTO: Esto es lo que sé hacer:
     entrenar            aprender de los ejemplos guardados
 
   SISTEMA
+    ordena tu diccionario   une repetidos y pasa conceptos a singular
     estado, quién eres, ayuda, salir
 
   Relaciones que entiendo:
@@ -1295,6 +1297,27 @@ def iniciar_hefesto():
             )
             print("HEFESTO: Mi modelo está cargado.")
             print("HEFESTO: Mi red neuronal está disponible.")
+
+        # ======================================
+        # ORDENAR EL DICCIONARIO
+        # ======================================
+
+        elif comando_normalizado in (
+            "ordena tu diccionario", "ordena el diccionario", "ordénate", "ordenate"
+        ):
+
+            r = ordenar_diccionario()
+
+            if not r["unidas"] and not r["renombradas"]:
+                print("HEFESTO: Mi diccionario ya estaba en orden.")
+            else:
+                print("HEFESTO: Listo, ordené mi diccionario.")
+
+                if r["unidas"]:
+                    print(f"  Uní {r['unidas']} concepto(s) repetido(s).")
+
+                for antes, despues in r["renombradas"]:
+                    print(f"  {antes} → {despues}")
 
         # ======================================
         # DE QUÉ HABLAMOS

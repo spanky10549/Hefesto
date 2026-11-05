@@ -40,15 +40,15 @@
                 "una computadora de placa única",
                 "una computadora"
             ],
+            "sinonimos": [
+                "rpi",
+                "frambuesa"
+            ],
             "relaciones": [
                 {
                     "relacion": "se comunica con",
                     "objetivo": "sensor"
                 }
-            ],
-            "sinonimos": [
-                "rpi",
-                "frambuesa"
             ]
         },
         {
@@ -116,13 +116,7 @@
             ]
         },
         {
-            "palabra": "automóvil",
-            "asociaciones": [
-                "sinónimo de coche"
-            ]
-        },
-        {
-            "palabra": "baterias",
+            "palabra": "bateria",
             "asociaciones": [],
             "relaciones": [
                 {
@@ -132,7 +126,7 @@
             ]
         },
         {
-            "palabra": "computadoras",
+            "palabra": "computadora",
             "asociaciones": [
                 "máquinas"
             ],
@@ -144,7 +138,7 @@
             ]
         },
         {
-            "palabra": "máquinas",
+            "palabra": "máquina",
             "asociaciones": [],
             "relaciones": [
                 {
@@ -167,7 +161,7 @@
             ]
         },
         {
-            "palabra": "aves",
+            "palabra": "ave",
             "asociaciones": [],
             "relaciones": [
                 {
