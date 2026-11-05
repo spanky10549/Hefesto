@@ -1,0 +1,8 @@
+# Python
+__pycache__/
+.pytest_cache/
+.venv/
+*.tmp
+
+# Respaldos manuales (Git ya guarda el historial)
+*_backup.*

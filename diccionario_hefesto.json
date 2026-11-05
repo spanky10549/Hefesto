@@ -1,0 +1,184 @@
+{
+    "palabras": [
+        {
+            "palabra": "microcontrolador",
+            "asociaciones": [
+                "hardware",
+                "electrónica",
+                "sensor"
+            ],
+            "relaciones": [
+                {
+                    "relacion": "controla",
+                    "objetivo": "sensor"
+                },
+                {
+                    "relacion": "utiliza",
+                    "objetivo": "memoria"
+                },
+                {
+                    "relacion": "detecta",
+                    "objetivo": "sensor"
+                },
+                {
+                    "relacion": "produce",
+                    "objetivo": "señal"
+                },
+                {
+                    "relacion": "controla",
+                    "objetivo": "actuador"
+                },
+                {
+                    "relacion": "recibe señal de",
+                    "objetivo": "sensor"
+                }
+            ]
+        },
+        {
+            "palabra": "raspberry pi",
+            "asociaciones": [
+                "una computadora de placa única",
+                "una computadora"
+            ],
+            "relaciones": [
+                {
+                    "relacion": "se comunica con",
+                    "objetivo": "sensor"
+                }
+            ],
+            "sinonimos": [
+                "rpi",
+                "frambuesa"
+            ]
+        },
+        {
+            "palabra": "actuador",
+            "asociaciones": [
+                "dispositivo electromecánico"
+            ],
+            "relaciones": [
+                {
+                    "relacion": "mueve",
+                    "objetivo": "rueda"
+                },
+                {
+                    "relacion": "conecta con",
+                    "objetivo": "rover"
+                }
+            ]
+        },
+        {
+            "palabra": "hefesto",
+            "asociaciones": [
+                "una inteligencia artificial"
+            ],
+            "relaciones": [
+                {
+                    "relacion": "utiliza",
+                    "objetivo": "python para aprender"
+                }
+            ]
+        },
+        {
+            "palabra": "rueda",
+            "asociaciones": [],
+            "relaciones": [
+                {
+                    "relacion": "forma parte de",
+                    "objetivo": "rover"
+                }
+            ]
+        },
+        {
+            "palabra": "rover",
+            "asociaciones": [],
+            "relaciones": [
+                {
+                    "relacion": "contiene",
+                    "objetivo": "rueda"
+                }
+            ]
+        },
+        {
+            "palabra": "sensor ultrasónico",
+            "asociaciones": [],
+            "relaciones": [
+                {
+                    "relacion": "mide",
+                    "objetivo": "distancia"
+                }
+            ]
+        },
+        {
+            "palabra": "automovil",
+            "asociaciones": [
+                "sinonimo de coche"
+            ]
+        },
+        {
+            "palabra": "automóvil",
+            "asociaciones": [
+                "sinónimo de coche"
+            ]
+        },
+        {
+            "palabra": "baterias",
+            "asociaciones": [],
+            "relaciones": [
+                {
+                    "relacion": "produce",
+                    "objetivo": "energia"
+                }
+            ]
+        },
+        {
+            "palabra": "computadoras",
+            "asociaciones": [
+                "máquinas"
+            ],
+            "relaciones": [
+                {
+                    "relacion": "necesita",
+                    "objetivo": "electricidad"
+                }
+            ]
+        },
+        {
+            "palabra": "máquinas",
+            "asociaciones": [],
+            "relaciones": [
+                {
+                    "relacion": "produce",
+                    "objetivo": "calor"
+                }
+            ]
+        },
+        {
+            "palabra": "pingüino",
+            "asociaciones": [
+                "un ave"
+            ],
+            "relaciones": [
+                {
+                    "relacion": "puede",
+                    "objetivo": "volar",
+                    "negada": true
+                }
+            ]
+        },
+        {
+            "palabra": "aves",
+            "asociaciones": [],
+            "relaciones": [
+                {
+                    "relacion": "puede",
+                    "objetivo": "volar"
+                },
+                {
+                    "relacion": "tiene",
+                    "objetivo": "plumas"
+                }
+            ]
+        }
+    ]
+}

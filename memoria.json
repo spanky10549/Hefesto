@@ -1,0 +1,95 @@
+{
+    "identidad": {
+        "nombre": "HEFESTO",
+        "creador": "spanky tu mero xd"
+    },
+    "conocimientos": [
+        {
+            "tipo": "proyecto",
+            "tema": "Focus",
+            "contenido": "HEFESTO está siendo desarrollado para Focus."
+        },
+        {
+            "tipo": "hardware",
+            "tema": "Focus",
+            "contenido": "Focus tendrá una Raspberry Pi 5."
+        },
+        {
+            "tipo": "proyecto",
+            "tema": "Focus",
+            "contenido": "HEFESTO será instalado en Focus."
+        },
+        {
+            "tipo": "percepción",
+            "tema": "Focus",
+            "contenido": "HEFESTO será entrenado para integrar una cámara y reconocimiento de voz."
+        },
+        {
+            "tipo": "hardware",
+            "tema": "Focus",
+            "contenido": "Focus tendrá sensores de temperatura."
+        },
+        {
+            "tipo": "software",
+            "tema": "HEFESTO",
+            "contenido": "Esta en entrenamiento."
+        },
+        {
+            "tipo": "hardware",
+            "tema": "Focus",
+            "contenido": "Focus tendrá una cámara y un micrófono nuevos"
+        },
+        {
+            "tipo": "software",
+            "temas": [
+                "HEFESTO",
+                "Python",
+                "Programación"
+            ],
+            "contenido": "estoy desarrollando HEFESTO en Python"
+        },
+        {
+            "tipo": "hardware",
+            "temas": [
+                "hardware",
+                "electrónica"
+            ],
+            "contenido": "el microcontrolador controla sensores"
+        },
+        {
+            "tipo": "inteligencia_artificial",
+            "temas": [
+                "HEFESTO",
+                "Inteligencia Artificial"
+            ],
+            "contenido": "HEFESTO está verificando la actualización de su memoria."
+        },
+        {
+            "tipo": "inteligencia_artificial",
+            "temas": [
+                "una inteligencia artificial",
+                "HEFESTO",
+                "Inteligencia Artificial"
+            ],
+            "contenido": "HEFESTO ha verificado su sistema de memoria correctamente."
+        },
+        {
+            "tipo": "sin_categoria",
+            "temas": [],
+            "contenido": "que me dare de baja"
+        },
+        {
+            "tipo": "sin_categoria",
+            "temas": [
+                "una inteligencia artificial",
+                "HEFESTO"
+            ],
+            "contenido": "| prueba_guardado | HEFESTO puede guardar conocimientos."
+        },
+        {
+            "tipo": "sin_categoria",
+            "temas": [],
+            "contenido": "prueba_guardado"
+        }
+    ]
+}

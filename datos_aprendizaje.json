@@ -1,0 +1,39 @@
+{
+    "datos": [
+        {
+            "entrada": [
+                0,
+                1
+            ],
+            "objetivo": 1
+        },
+        {
+            "entrada": [
+                0,
+                0
+            ],
+            "objetivo": 0
+        },
+        {
+            "entrada": [
+                1,
+                0
+            ],
+            "objetivo": 1
+        },
+        {
+            "entrada": [
+                1,
+                1
+            ],
+            "objetivo": 0
+        },
+        {
+            "entrada": [
+                0,
+                1
+            ],
+            "objetivo": 1
+        }
+    ]
+}
