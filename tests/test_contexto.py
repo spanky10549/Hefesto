@@ -90,3 +90,56 @@ def test_pregunta_con_preposicion():
 def test_detecta_tema_con_preposicion():
     assert detectar_tema("a qué pertenece el sensor") == "sensor"
     assert detectar_tema("de qué depende el motor") == "motor"
+
+
+# ==========================================
+# DOS TEMAS: REPETIR LA PREGUNTA CON OTRO SUJETO
+# ==========================================
+
+from conversacion.contexto import crear_plantilla
+
+
+@pytest.mark.parametrize("comando, tema, plantilla", [
+    ("¿el pingüino puede volar?", "pingüino", "¿{tema} puede volar?"),
+    ("qué tiene el ave", "ave", "qué tiene {tema}"),
+    ("qué sabes de los pingüinos", "pingüinos", "qué sabes de {tema}"),
+    ("a qué pertenece el sensor", "sensor", "a qué pertenece {tema}"),
+    ("aprende que el pingüino puede nadar", "pingüino", "aprende que {tema} puede nadar"),
+])
+def test_crear_plantilla(comando, tema, plantilla):
+    assert crear_plantilla(comando, tema) == plantilla
+
+
+@pytest.mark.parametrize("comando, tema", [
+    ("olvida que el sensor mide luz", "sensor"),
+    ("recuerda el sensor es azul", "sensor"),
+    ("ayuda", None),
+])
+def test_no_crea_plantilla_cuando_no_conviene(comando, tema):
+    assert crear_plantilla(comando, tema) is None
+
+
+@pytest.mark.parametrize("comando", [
+    "¿y el gorrión también?",
+    "¿y el gorrión?",
+    "¿el gorrión también?",
+    "¿también el gorrión?",
+    "y los gorriones también",
+])
+def test_repite_la_pregunta_con_otro_sujeto(comando):
+    completo, uso = aplicar_contexto(comando, "pingüino", "¿{tema} puede volar?")
+
+    assert uso is True
+    assert completo in ("¿gorrión puede volar?", "¿gorriones puede volar?")
+
+
+def test_sin_pregunta_anterior_cambia_de_tema():
+    completo, uso = aplicar_contexto("¿y el gorrión también?", "pingüino", None)
+
+    assert (completo, uso) == ("qué sabes de gorrión", False)
+
+
+def test_tambien_con_verbo_sigue_funcionando():
+    completo, uso = aplicar_contexto("¿también puede nadar?", "pingüino", None)
+
+    assert (completo, uso) == ("¿pingüino puede nadar?", True)

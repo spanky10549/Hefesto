@@ -1,16 +1,20 @@
 """
 Contexto de conversación de HEFESTO.
 
-Recuerda de qué se está hablando para entender preguntas incompletas:
+Recuerda de qué se está hablando, y qué se preguntó, para entender
+preguntas incompletas:
 
     Tú: qué sabes del pingüino
     Tú: ¿y puede nadar?        → ¿pingüino puede nadar?
     Tú: ¿y qué tiene?          → qué tiene pingüino
     Tú: qué más sabes de él    → qué sabes de pingüino
+    Tú: ¿y el gorrión también? → qué tiene gorrión   (repite la pregunta)
 
 Son funciones puras: reciben texto y devuelven texto, sin imprimir
 ni preguntar nada. Por eso se pueden probar fácilmente.
 """
+
+import re
 
 from apollo.lenguaje import (
     normalizar_texto,
@@ -66,14 +70,41 @@ def _verbo_sin_objeto(texto):
 # 1. COMPLETAR PREGUNTAS INCOMPLETAS
 # ==========================================
 
-def aplicar_contexto(comando, tema):
+def _quitar_tambien(texto):
+    """'el gorrión también' → ('el gorrión', True)"""
+    palabras = texto.split()
+    tambien = False
+
+    for extremo in (0, -1):
+        if palabras and palabras[extremo] in ("también", "tambien"):
+            palabras.pop(extremo)
+            tambien = True
+
+    return " ".join(palabras), tambien
+
+
+def _es_solo_un_concepto(texto):
+    """'el gorrión', 'del sensor': un concepto suelto, sin verbo ni comando."""
+    return bool(
+        texto
+        and not texto.startswith(COMANDOS)
+        and not _empieza_con_verbo(texto)
+        and not _verbo_sin_objeto(texto)
+        and extraer_relacion_con_negacion(texto, incluir_es=True) is None
+    )
+
+
+def aplicar_contexto(comando, tema, plantilla=None):
     """
-    Si el comando depende del tema actual, lo completa.
+    Si el comando depende de la conversación, lo completa.
+
+    'tema' es de qué se está hablando; 'plantilla' es la última
+    pregunta con un hueco para el tema (ver crear_plantilla).
 
     Devuelve (comando_completo, uso_contexto):
         - comando_completo: el texto a procesar.
-        - uso_contexto: True si se completó con el tema, False si no
-          hizo falta, o None si hacía falta un tema y no hay ninguno.
+        - uso_contexto: True si se completó con la conversación, False si
+          no hizo falta, o None si hacía falta un tema y no hay ninguno.
     """
     texto = _sin_signos_de_pregunta(comando)
     era_pregunta = "?" in comando or "¿" in comando
@@ -83,6 +114,10 @@ def aplicar_contexto(comando, tema):
 
     if seguimiento:
         texto = texto[2:].strip()
+
+    # "también" puede ir al inicio o al final: "¿y el gorrión también?"
+    texto, tambien = _quitar_tambien(texto)
+    seguimiento = seguimiento or tambien
 
     # ¿Hace falta el tema?
     completado = None
@@ -106,16 +141,18 @@ def aplicar_contexto(comando, tema):
     elif (seguimiento or era_pregunta) and _empieza_con_verbo(texto):
         completado = "¿{tema} " + texto + "?"
 
-    # "y del sensor?" → cambia de tema: "qué sabes de sensor"
-    elif (
-        seguimiento
-        and palabras
-        and not texto.startswith(COMANDOS)
-        and extraer_relacion_con_negacion(texto, incluir_es=True) is None
-    ):
+    # "¿y el gorrión (también)?" → la misma pregunta, con otro sujeto.
+    # Si no hay pregunta anterior, cambia de tema: "qué sabes de gorrión".
+    elif seguimiento and _es_solo_un_concepto(texto):
+
         nuevo = limpiar_concepto(expandir_contracciones(texto))
+
         if nuevo.startswith("de "):
             nuevo = limpiar_concepto(nuevo[3:])
+
+        if plantilla:
+            return plantilla.format(tema=nuevo), True
+
         return f"qué sabes de {nuevo}", False
 
     if completado is None:
@@ -177,3 +214,39 @@ def detectar_tema(comando):
         return resultado[0]
 
     return None
+
+
+# ==========================================
+# 3. RECORDAR QUÉ SE PREGUNTÓ
+# ==========================================
+
+ARTICULOS = r"(?:(?:el|la|los|las|un|una|unos|unas)\s+)?"
+
+
+def crear_plantilla(comando, tema):
+    """
+    Convierte el comando en una plantilla con un hueco donde va el tema,
+    para poder repetirlo con otro sujeto:
+
+        '¿el pingüino puede volar?' + 'pingüino' → '¿{tema} puede volar?'
+        'qué tiene el ave'          + 'ave'      → 'qué tiene {tema}'
+
+    Devuelve None si no se puede (o si no conviene repetirlo, como
+    'olvida' o 'recuerda').
+    """
+    if not tema:
+        return None
+
+    texto = expandir_contracciones(normalizar_texto(comando))
+
+    if texto.startswith(("olvida", "recuerda")):
+        return None
+
+    # Las llaves del texto se duplican para que format() no las confunda.
+    texto = texto.replace("{", "{{").replace("}", "}}")
+
+    patron = r"\b" + ARTICULOS + re.escape(tema) + r"\b"
+
+    plantilla, cambios = re.subn(patron, "{tema}", texto, count=1)
+
+    return plantilla if cambios else None

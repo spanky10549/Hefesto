@@ -39,7 +39,7 @@ from apollo.lenguaje import (
     preguntas_de_relacion
 )
 
-from conversacion.contexto import aplicar_contexto, detectar_tema
+from conversacion.contexto import aplicar_contexto, detectar_tema, crear_plantilla
 
 from apollo.razonamiento import (
     ancestros,
@@ -1133,7 +1133,8 @@ HEFESTO: Esto es lo que sé hacer:
     ¿y puede nadar?          → entiendo que hablas del pingüino
     ¿y qué tiene?
     qué más sabes de él
-    ¿y del sensor?           → cambia de tema
+    ¿y el gorrión también?   → repite tu última pregunta con el gorrión
+    ¿y del sensor?           → lo mismo, con el sensor
     de qué hablamos
 
   OLVIDAR Y CORREGIR
@@ -1232,8 +1233,10 @@ def iniciar_hefesto():
     # INTERFAZ PRINCIPAL
     # ======================================
 
-    # De qué estamos hablando (para entender "¿y puede nadar?").
+    # De qué estamos hablando (para entender "¿y puede nadar?")
+    # y la última pregunta (para entender "¿y el gorrión también?").
     tema_actual = None
+    ultima_plantilla = None
 
     while True:
 
@@ -1251,7 +1254,7 @@ def iniciar_hefesto():
         # CONTEXTO DE LA CONVERSACIÓN
         # ======================================
 
-        comando, uso_contexto = aplicar_contexto(comando, tema_actual)
+        comando, uso_contexto = aplicar_contexto(comando, tema_actual, ultima_plantilla)
 
         if uso_contexto is None:
             print(
@@ -1261,11 +1264,13 @@ def iniciar_hefesto():
             continue
 
         if uso_contexto:
-            print(f"HEFESTO: (Hablando de {tema_actual}: {comando})")
+            print(f"HEFESTO: (Entiendo: {comando})")
 
         nuevo_tema = detectar_tema(comando)
 
         if nuevo_tema:
+            ultima_plantilla = crear_plantilla(comando, nuevo_tema) or ultima_plantilla
+
             # Si viene con error de escritura, recordar la forma correcta.
             if not existe_concepto(nuevo_tema):
                 nuevo_tema = sugerir_concepto(nuevo_tema) or nuevo_tema
