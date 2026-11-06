@@ -7,7 +7,17 @@ y busca conexiones entre conceptos.
 
 import os
 
-from memoria.base_datos import cargar_diccionario_sql, guardar_diccionario_sql
+from memoria.base_datos import (
+    preparar_base,
+    cargar_diccionario_sql,
+    guardar_diccionario_sql,
+    buscar_concepto_sql,
+    entradas_por_clave_sql,
+    relaciones_sql,
+    inversas_sql,
+    nombres_sql,
+    existe_sql
+)
 
 from memoria.almacenamiento import cargar_json, ErrorAlmacenamiento
 
@@ -62,17 +72,43 @@ def migrar_desde_json():
             "El diccionario JSON no tiene la estructura esperada."
         )
 
+    preparar_base(ruta_base_datos(), normalizar_concepto)
     guardar_diccionario_sql(ruta_base_datos(), diccionario, normalizar_concepto)
     return True
 
 
+_bases_listas = set()
+
+
+def base():
+    """
+    Ruta de la base de datos, ya lista: migra el JSON viejo y actualiza
+    la versión de las tablas la primera vez que se usa.
+    """
+    ruta = ruta_base_datos()
+
+    if ruta not in _bases_listas or not os.path.exists(ruta):
+        migrar_desde_json()
+        preparar_base(ruta, normalizar_concepto)
+        _bases_listas.add(ruta)
+
+    return ruta
+
+
 def cargar_diccionario():
-    migrar_desde_json()
-    return cargar_diccionario_sql(ruta_base_datos())
+    """Todo el diccionario. Lo usan aprender y olvidar, que lo modifican completo."""
+    return cargar_diccionario_sql(base())
 
 
 def guardar_diccionario(diccionario):
-    guardar_diccionario_sql(ruta_base_datos(), diccionario, normalizar_concepto)
+    guardar_diccionario_sql(base(), diccionario, normalizar_concepto)
+
+
+def entradas_del_concepto(concepto):
+    """Las entradas de un concepto (o de su nombre principal, si es sinónimo)."""
+    entrada = buscar_entrada(concepto)
+    principal = entrada["palabra"] if entrada else concepto
+    return entradas_por_clave_sql(base(), normalizar_concepto(principal))
 
 
 # ==========================================
@@ -82,9 +118,9 @@ def guardar_diccionario(diccionario):
 def buscar_entrada(palabra, diccionario=None):
     """Busca un concepto por su nombre principal o por un sinónimo."""
 
-    # Si no recibe un diccionario, carga uno.
+    # Sin diccionario en mano, le pregunta directo a la base de datos.
     if diccionario is None:
-        diccionario = cargar_diccionario()
+        return buscar_concepto_sql(base(), normalizar_concepto(palabra))
 
     palabra = normalizar_concepto(palabra)
 
@@ -405,71 +441,55 @@ def aprender_relacion(sujeto, relacion, objeto, negada=False, reemplazar=False):
 
 def buscar_relaciones(sujeto, objeto=None, negadas=False):
     """
-    Relaciones de un concepto.
+    Relaciones de un concepto, consultando directo la base de datos.
 
     Por defecto devuelve solo las afirmativas ("mide").
     Con negadas=True devuelve solo las negativas ("NO mide").
+    Con objeto, solo las que apuntan a ese objeto.
     """
 
-    diccionario = cargar_diccionario()
-
-    sujeto = normalizar_concepto(sujeto)
-
     # Si el sujeto es un sinónimo, usar el nombre principal.
-    entrada_sinonimo = buscar_entrada(sujeto, diccionario)
+    entrada = buscar_entrada(sujeto)
+    principal = entrada["palabra"] if entrada else sujeto
 
-    if entrada_sinonimo is not None:
-        sujeto = normalizar_concepto(
-            entrada_sinonimo.get("palabra", sujeto)
-        )
+    filas = relaciones_sql(base(), normalizar_concepto(principal), negadas)
 
-    relaciones_encontradas = []
+    objeto = normalizar_concepto(objeto) if objeto is not None else None
 
-    if objeto is not None:
-        objeto = normalizar_concepto(objeto)
+    encontradas = []
 
-    for entrada in diccionario.get("palabras", []):
+    for relacion, objetivo in filas:
 
-        if not isinstance(entrada, dict):
+        if objeto is not None and normalizar_concepto(objetivo) != objeto:
             continue
 
-        palabra_guardada = normalizar_concepto(
-            entrada.get("palabra", "")
-        )
+        nueva = {"relacion": relacion, "objetivo": objetivo}
 
-        if palabra_guardada == sujeto:
+        if negadas:
+            nueva["negada"] = True
 
-            relaciones = entrada.get("relaciones", [])
+        # Puede haber entradas antiguas repetidas
+        # ("sensor" y "sensores"): se juntan sin duplicar.
+        if nueva not in encontradas:
+            encontradas.append(nueva)
 
-            if not isinstance(relaciones, list):
-                continue
+    return encontradas
 
-            relaciones_validas = [
-                relacion
-                for relacion in relaciones
-                if isinstance(relacion, dict)
-                and isinstance(relacion.get("objetivo"), str)
-                and isinstance(relacion.get("relacion"), str)
-                and es_negada(relacion) == negadas
-            ]
 
-            if objeto is not None:
+def buscar_inversas(objeto):
+    """
+    Quién apunta a este concepto: [(sujeto, relacion), ...].
+    Incluye lo que apunta a sus sinónimos.
+    """
+    entrada = buscar_entrada(objeto)
 
-                relaciones_validas = [
-                    relacion
-                    for relacion in relaciones_validas
-                    if normalizar_concepto(
-                        relacion["objetivo"]
-                    ) == objeto
-                ]
+    if entrada:
+        claves = {normalizar_concepto(entrada["palabra"])}
+        claves |= {normalizar_concepto(s) for s in entrada.get("sinonimos", [])}
+    else:
+        claves = {normalizar_concepto(objeto)}
 
-            # Puede haber entradas antiguas repetidas
-            # ("sensor" y "sensores"): se juntan sus relaciones.
-            for relacion in relaciones_validas:
-                if relacion not in relaciones_encontradas:
-                    relaciones_encontradas.append(relacion)
-
-    return relaciones_encontradas
+    return inversas_sql(base(), claves)
 
 
 def buscar_camino(origen, destino, visitados=None):
@@ -649,35 +669,32 @@ def nombres_conocidos(diccionario=None):
     """Todos los nombres que Hefesto conoce: conceptos, sinónimos y objetivos."""
 
     if diccionario is None:
-        diccionario = cargar_diccionario()
+        filas = nombres_sql(base())
+    else:
+        filas = []
+        for entrada in diccionario["palabras"]:
+            if not isinstance(entrada, dict):
+                continue
+            nombres = [entrada.get("palabra", "")] + list(entrada.get("sinonimos", []))
+            nombres += [
+                r.get("objetivo", "") for r in entrada.get("relaciones", [])
+                if isinstance(r, dict)
+            ]
+            filas += [(normalizar_concepto(n), n) for n in nombres if isinstance(n, str)]
 
-    nombres = []
-
-    for entrada in diccionario["palabras"]:
-
-        if not isinstance(entrada, dict):
-            continue
-
-        nombres.append(entrada.get("palabra", ""))
-        nombres.extend(entrada.get("sinonimos", []))
-
-        for relacion in entrada.get("relaciones", []):
-            if isinstance(relacion, dict):
-                nombres.append(relacion.get("objetivo", ""))
-
-    # Quitar vacíos y repetidos (comparando normalizado).
+    # Quitar vacíos y repetidos.
     unicos = {}
 
-    for nombre in nombres:
-        if isinstance(nombre, str) and nombre.strip():
-            unicos.setdefault(normalizar_concepto(nombre), nombre)
+    for normalizado, original in filas:
+        if normalizado and original.strip():
+            unicos.setdefault(normalizado, original)
 
     return unicos
 
 
 def existe_concepto(texto):
     """Indica si Hefesto conoce este concepto con esa escritura."""
-    return normalizar_concepto(texto) in nombres_conocidos()
+    return existe_sql(base(), normalizar_concepto(texto))
 
 
 def sugerir_concepto(texto):

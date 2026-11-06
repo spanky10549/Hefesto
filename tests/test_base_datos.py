@@ -118,3 +118,62 @@ def test_guarda_el_concepto_normalizado(carpeta):
     conexion.close()
 
     assert (palabra, normalizado) == ("batería", "bateria")
+
+
+# ==========================================
+# ACTUALIZAR UNA BASE DE LA VERSIÓN ANTERIOR
+# ==========================================
+
+def crear_base_version_1(ruta):
+    """Una base como la que creó la primera versión (sin columnas normalizadas)."""
+    conexion = sqlite3.connect(ruta)
+    conexion.executescript("""
+        CREATE TABLE conceptos (id INTEGER PRIMARY KEY, palabra TEXT, normalizado TEXT, orden INTEGER);
+        CREATE TABLE asociaciones (concepto_id INTEGER, texto TEXT, orden INTEGER);
+        CREATE TABLE sinonimos (concepto_id INTEGER, texto TEXT, orden INTEGER);
+        CREATE TABLE relaciones (concepto_id INTEGER, relacion TEXT, objetivo TEXT,
+                                 negada INTEGER, orden INTEGER);
+        INSERT INTO conceptos VALUES (1, 'raspberry pi', 'raspberry pi', 0);
+        INSERT INTO asociaciones VALUES (1, 'una computadora', 0);
+        INSERT INTO sinonimos VALUES (1, 'rpi', 0);
+        INSERT INTO relaciones VALUES (1, 'se comunica con', 'sensores', 0, 0);
+    """)
+    conexion.commit()
+    conexion.close()
+
+
+def test_actualiza_base_vieja_sin_perder_nada(carpeta):
+    crear_base_version_1(carpeta / "diccionario_hefesto.db")
+    apollo._bases_listas.clear()
+
+    assert apollo.buscar_entrada("rpi")["palabra"] == "raspberry pi"
+    assert apollo.buscar_relaciones("rpi") == [
+        {"relacion": "se comunica con", "objetivo": "sensores"}
+    ]
+
+    conexion = sqlite3.connect(carpeta / "diccionario_hefesto.db")
+    version = conexion.execute("PRAGMA user_version").fetchone()[0]
+    conexion.close()
+    assert version == 2
+
+
+# ==========================================
+# CONSULTAS DIRECTAS
+# ==========================================
+
+def test_inversas_por_sinonimo(carpeta):
+    apollo.aprender_palabra("sensor", "un dispositivo")
+    apollo.aprender_sinonimo("sensor", "detector")
+    apollo.aprender_relacion("raspberry pi", "se comunica con", "detector")
+
+    from apollo import razonamiento
+    assert razonamiento.relaciones_inversas("sensores") == [
+        {"sujeto": "raspberry pi", "relacion": "se comunica con"}
+    ]
+
+
+def test_existe_concepto_por_objetivo(carpeta):
+    apollo.aprender_relacion("sensor", "mide", "temperatura")
+
+    assert apollo.existe_concepto("la temperatura")
+    assert not apollo.existe_concepto("unicornio")

@@ -15,7 +15,8 @@ Cada conclusión viene con su "cadena": los pasos que la justifican.
 """
 
 from apollo.conocimiento import (
-    cargar_diccionario,
+    entradas_del_concepto,
+    buscar_inversas,
     buscar_entrada,
     buscar_relaciones,
     es_negada
@@ -23,7 +24,6 @@ from apollo.conocimiento import (
 
 from apollo.lenguaje import (
     forma_singular,
-    limpiar_concepto,
     normalizar_concepto,
     normalizar_relacion
 )
@@ -51,11 +51,14 @@ def mismo_concepto(a, b, diccionario):
     )
 
 
-def entradas_de(concepto, diccionario):
+def entradas_de(concepto, diccionario=None):
     """
     Todas las entradas del diccionario que corresponden al concepto.
     Puede haber más de una en datos antiguos ('sensor' y 'sensores').
     """
+    if diccionario is None:
+        return entradas_del_concepto(concepto)
+
     buscado = normalizar_concepto(nombre_principal(concepto, diccionario))
 
     return [
@@ -81,9 +84,6 @@ def categorias_directas(concepto, diccionario=None):
     'aprende que la raspberry pi es una computadora' se guarda como
     asociación; aquí se interpreta como: raspberry pi → es → computadora.
     """
-    if diccionario is None:
-        diccionario = cargar_diccionario()
-
     categorias = []
 
     for entrada in entradas_de(concepto, diccionario):
@@ -122,9 +122,6 @@ def ancestros(concepto, diccionario=None):
     Recorre el grafo por niveles (búsqueda en anchura), así que
     siempre encuentra la cadena más corta y no se traba con ciclos.
     """
-    if diccionario is None:
-        diccionario = cargar_diccionario()
-
     origen = nombre_principal(concepto, diccionario)
 
     visitados = {normalizar_concepto(origen)}
@@ -163,9 +160,6 @@ def relaciones_inferidas(concepto, diccionario=None):
     Devuelve una lista de:
         {"relacion": ..., "objetivo": ..., "cadena": [pasos]}
     """
-    if diccionario is None:
-        diccionario = cargar_diccionario()
-
     def claves(relaciones):
         return {
             (normalizar_relacion(r["relacion"]), normalizar_concepto(r["objetivo"]))
@@ -225,46 +219,22 @@ def relaciones_inversas(objeto, diccionario=None):
 
     Si 'sensor → mide → temperatura', entonces para 'temperatura':
         [{"sujeto": "sensor", "relacion": "mide"}]
-    """
-    if diccionario is None:
-        diccionario = cargar_diccionario()
 
+    Se lo pregunta directo a la base de datos (sin cargarla completa).
+    """
     encontradas = []
     vistas = set()
 
-    for entrada in diccionario["palabras"]:
+    for sujeto, verbo in buscar_inversas(objeto):
 
-        if not isinstance(entrada, dict):
+        verbo = normalizar_relacion(verbo)
+        clave = (normalizar_concepto(sujeto), verbo)
+
+        if clave in vistas:
             continue
 
-        sujeto = entrada.get("palabra", "")
-
-        candidatos = [
-            (normalizar_relacion(r.get("relacion", "")), r.get("objetivo"))
-            for r in entrada.get("relaciones", [])
-            if isinstance(r, dict) and not es_negada(r)
-        ]
-
-        candidatos += [
-            ("es", asociacion)
-            for asociacion in entrada.get("asociaciones", [])
-        ]
-
-        for verbo, destino in candidatos:
-
-            if not isinstance(destino, str):
-                continue
-
-            if not mismo_concepto(limpiar_concepto(destino), objeto, diccionario):
-                continue
-
-            clave = (normalizar_concepto(sujeto), verbo)
-
-            if clave in vistas:
-                continue
-
-            vistas.add(clave)
-            encontradas.append({"sujeto": sujeto, "relacion": verbo})
+        vistas.add(clave)
+        encontradas.append({"sujeto": sujeto, "relacion": verbo})
 
     return encontradas
 
@@ -280,9 +250,6 @@ def verificar(sujeto, relacion, objeto, diccionario=None):
     Devuelve la cadena de pasos que lo demuestra, o None si
     Hefesto no tiene información para confirmarlo.
     """
-    if diccionario is None:
-        diccionario = cargar_diccionario()
-
     relacion = normalizar_relacion(relacion)
 
     # 1. ¿Es una categoría? (directa o heredada)
@@ -343,9 +310,6 @@ def responder(sujeto, relacion, objeto, diccionario=None):
       2. Lo que se sabe de su categoría más cercana.
       3. Lo de categorías más lejanas.
     """
-    if diccionario is None:
-        diccionario = cargar_diccionario()
-
     verbo = normalizar_relacion(relacion)
 
     # Categorías: "¿el pingüino es un ave?"
