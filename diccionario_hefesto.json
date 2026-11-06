@@ -157,6 +157,10 @@
                     "relacion": "puede",
                     "objetivo": "volar",
                     "negada": true
+                },
+                {
+                    "relacion": "puede",
+                    "objetivo": "nadar"
                 }
             ]
         },
@@ -172,6 +176,22 @@
                     "relacion": "tiene",
                     "objetivo": "plumas"
                 }
+            ]
+        },
+        {
+            "palabra": "pato",
+            "asociaciones": [],
+            "relaciones": [
+                {
+                    "relacion": "puede",
+                    "objetivo": "nadar"
+                }
+            ]
+        },
+        {
+            "palabra": "gorrion",
+            "asociaciones": [
+                "ave"
             ]
         }
     ]

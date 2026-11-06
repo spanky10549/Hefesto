@@ -6,3 +6,6 @@ __pycache__/
 
 # Respaldos manuales (Git ya guarda el historial)
 *_backup.*
+
+# Estado de la conversación (cambia en cada plática)
+conversacion.json

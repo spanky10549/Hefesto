@@ -40,6 +40,12 @@ from apollo.lenguaje import (
 )
 
 from conversacion.contexto import aplicar_contexto, detectar_tema, crear_plantilla
+from conversacion.estado import (
+    cargar_estado,
+    guardar_estado,
+    olvidar_estado,
+    describir_fecha
+)
 
 from apollo.razonamiento import (
     ancestros,
@@ -1136,6 +1142,8 @@ HEFESTO: Esto es lo que sé hacer:
     ¿y el gorrión también?   → repite tu última pregunta con el gorrión
     ¿y del sensor?           → lo mismo, con el sensor
     de qué hablamos
+    cambiemos de tema        → olvida el tema actual
+    (me acuerdo del tema aunque me apagues)
 
   OLVIDAR Y CORREGIR
     olvida que <algo> <relación> <algo>
@@ -1235,8 +1243,18 @@ def iniciar_hefesto():
 
     # De qué estamos hablando (para entender "¿y puede nadar?")
     # y la última pregunta (para entender "¿y el gorrión también?").
-    tema_actual = None
-    ultima_plantilla = None
+    # Se recuerdan de la sesión anterior.
+    estado = cargar_estado()
+    tema_actual = estado["tema"]
+    ultima_plantilla = estado["plantilla"]
+
+    if tema_actual:
+        cuando = describir_fecha(estado["fecha"])
+        cuando = f" ({cuando})" if cuando else ""
+        print(
+            f"HEFESTO: La última vez{cuando} hablábamos de {tema_actual}. "
+            f"Podemos seguir, o dime 'cambiemos de tema'."
+        )
 
     while True:
 
@@ -1275,6 +1293,7 @@ def iniciar_hefesto():
             if not existe_concepto(nuevo_tema):
                 nuevo_tema = sugerir_concepto(nuevo_tema) or nuevo_tema
             tema_actual = nuevo_tema
+            guardar_estado(tema_actual, ultima_plantilla)
 
         comando_normalizado = expandir_contracciones(normalizar_texto(comando))
 
@@ -1323,6 +1342,20 @@ def iniciar_hefesto():
 
                 for antes, despues in r["renombradas"]:
                     print(f"  {antes} → {despues}")
+
+        # ======================================
+        # CAMBIAR DE TEMA
+        # ======================================
+
+        elif comando_normalizado.replace("¿", "").replace("?", "").strip() in (
+            "cambiemos de tema", "cambia de tema", "olvida el tema",
+            "nuevo tema", "otro tema"
+        ):
+
+            tema_actual = None
+            ultima_plantilla = None
+            olvidar_estado()
+            print("HEFESTO: Va, empecemos de cero. ¿De qué quieres hablar?")
 
         # ======================================
         # DE QUÉ HABLAMOS
