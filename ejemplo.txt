@@ -1,0 +1,12 @@
+La Raspberry Pi es una computadora de placa única. Las computadoras necesitan electricidad.
+RPi es sinónimo de Raspberry Pi.
+
+Los sensores miden la temperatura y la humedad. El sensor ultrasónico detecta obstáculos.
+El rover tiene cuatro ruedas. Los motores mueven las ruedas.
+La batería es una fuente de energía; las baterías producen calor.
+
+Las aves pueden volar. Los pingüinos son aves, pero el pingüino no puede volar.
+Además, el pingüino puede nadar.
+
+El voltaje de la Raspberry Pi 5 es de 5 V.
+Focus será un ecosistema de inteligencias.

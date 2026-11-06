@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import re
 
 from memoria.almacenamiento import (
     cargar_json,
@@ -38,6 +39,9 @@ from apollo.lenguaje import (
     expandir_contracciones,
     preguntas_de_relacion
 )
+
+from apollo.lector import leer_archivo, guardar_hechos
+from apollo.lenguaje import forma_singular
 
 from conversacion.contexto import aplicar_contexto, detectar_tema, crear_plantilla
 from conversacion.estado import (
@@ -880,6 +884,131 @@ def aprender_relacion_conversando(sujeto, relacion, objeto, negada=False):
 
 
 # ==========================================
+# LEER DOCUMENTOS
+# ==========================================
+
+CARPETA_DOCUMENTOS = "documentos"
+EXTENSIONES_TEXTO = (".txt", ".md")
+ESTADOS_NUEVOS = {"nueva", "asociada", "aprendido", "aprendida"}
+
+
+def describir_hecho(hecho):
+    """Un hecho leído, en forma de flecha."""
+    sujeto = forma_singular(hecho["sujeto"])
+
+    if hecho["tipo"] == "categoria":
+        return f"{sujeto} → es → {forma_singular(hecho['objeto'])}"
+
+    if hecho["tipo"] == "sinonimo":
+        return f"{hecho['sujeto']} ↔ {hecho['objeto']}  (mismo concepto)"
+
+    no = "NO " if hecho["negada"] else ""
+    return f"{sujeto} → {no}{hecho['relacion']} → {hecho['objeto']}"
+
+
+def encontrar_documento(texto):
+    """Busca el archivo tal cual o dentro de la carpeta documentos."""
+    ruta = texto.strip().strip('"').strip("'")
+
+    for candidata in (ruta, os.path.join(CARPETA_DOCUMENTOS, ruta)):
+        if os.path.isfile(candidata):
+            return candidata
+
+    return None
+
+
+def elegir_hechos(hechos):
+    """
+    Pregunta qué guardar: s = todo, n = nada,
+    o los números de los que NO se quieren (ej. '2 5').
+    """
+    respuesta = input(
+        "HEFESTO: ¿Qué guardo? "
+        "(s = todo, n = nada, o los números que NO quieres, ej. 2 5): "
+    ).strip().lower()
+
+    if respuesta in ("s", "si", "sí", "todo"):
+        return hechos
+
+    numeros = {int(n) for n in re.findall(r"\d+", respuesta)}
+
+    if not numeros:
+        return []
+
+    return [h for i, h in enumerate(hechos, start=1) if i not in numeros]
+
+
+def leer_documento(texto_ruta):
+    """Lee un documento, muestra lo que entendió y guarda lo que elijas."""
+
+    ruta = encontrar_documento(texto_ruta)
+
+    if ruta is None:
+        print(
+            f"HEFESTO: No encontré '{texto_ruta.strip()}'. "
+            f"Ponlo en la carpeta '{CARPETA_DOCUMENTOS}' o escribe la ruta completa."
+        )
+        return
+
+    if not ruta.lower().endswith(EXTENSIONES_TEXTO):
+        print("HEFESTO: Por ahora solo sé leer archivos de texto (.txt o .md).")
+        return
+
+    lectura = leer_archivo(ruta)
+    hechos = lectura["hechos"]
+    no_entendidas = lectura["no_entendidas"]
+
+    if not hechos:
+        print(f"HEFESTO: Leí {ruta}, pero no encontré nada que pudiera aprender.")
+        return
+
+    print(f"HEFESTO: Leí {ruta}. Esto es lo que entendí:")
+
+    for numero, hecho in enumerate(hechos, start=1):
+        print(f"  {numero:>2}. {describir_hecho(hecho)}")
+
+    if no_entendidas:
+        print(f"HEFESTO: Y no entendí {len(no_entendidas)} oración(es):")
+
+        for oracion in no_entendidas[:10]:
+            print(f"   - {oracion}")
+
+        if len(no_entendidas) > 10:
+            print(f"   ... y {len(no_entendidas) - 10} más.")
+
+    elegidos = elegir_hechos(hechos)
+
+    if not elegidos:
+        print("HEFESTO: Va, no guardé nada.")
+        return
+
+    resultados = guardar_hechos(elegidos)
+
+    nuevos = sum(1 for _, r in resultados if r["estado"] in ESTADOS_NUEVOS)
+    sabidos = sum(1 for _, r in resultados if r["estado"] == "ya_sabia")
+    choques = [(h, r) for h, r in resultados if r["estado"] == "contradiccion"]
+    fallidos = [
+        (h, r) for h, r in resultados
+        if r["estado"] not in ESTADOS_NUEVOS | {"ya_sabia", "contradiccion"}
+    ]
+
+    print(f"HEFESTO: Aprendí {nuevos} cosa(s) nueva(s). Ya sabía {sabidos}.")
+
+    if choques:
+        print("HEFESTO: Estas contradicen lo que sé y no las guardé:")
+        for hecho, r in choques:
+            print(f"  - {describir_hecho(hecho)}")
+            for conflicto in r["conflictos"]:
+                print(f"      (yo sé: {flecha(conflicto)})")
+        print("  Si alguna es correcta, enséñamela con 'aprende que...'.")
+
+    if fallidos:
+        print("HEFESTO: Estas no las pude guardar:")
+        for hecho, r in fallidos:
+            print(f"  - {describir_hecho(hecho)} ({r['estado']})")
+
+
+# ==========================================
 # OLVIDAR
 # ==========================================
 
@@ -1145,6 +1274,11 @@ HEFESTO: Esto es lo que sé hacer:
     cambiemos de tema        → olvida el tema actual
     (me acuerdo del tema aunque me apagues)
 
+  LEER DOCUMENTOS
+    lee <archivo.txt>        busca en la carpeta 'documentos'
+        lee ejemplo.txt
+    Te muestro lo que entendí y tú decides qué guardo.
+
   OLVIDAR Y CORREGIR
     olvida que <algo> <relación> <algo>
         olvida que el sensor mide la humedad
@@ -1390,6 +1524,18 @@ def iniciar_hefesto():
             print("[0,1] →", hefesto.predecir([0, 1]))
             print("[1,0] →", hefesto.predecir([1, 0]))
             print("[1,1] →", hefesto.predecir([1, 1]))
+
+        # ======================================
+        # LEER DOCUMENTOS
+        # ======================================
+
+        elif comando_normalizado.startswith("lee "):
+
+            ruta = re.sub(
+                r"^\s*lee\s+(?:el\s+(?:archivo|documento)\s+)?", "",
+                comando, flags=re.IGNORECASE
+            )
+            leer_documento(ruta)
 
         # ======================================
         # OLVIDAR
