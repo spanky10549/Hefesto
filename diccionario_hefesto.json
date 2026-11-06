@@ -96,6 +96,10 @@
                 {
                     "relacion": "contiene",
                     "objetivo": "rueda"
+                },
+                {
+                    "relacion": "tiene",
+                    "objetivo": "cuatro ruedas"
                 }
             ]
         },
@@ -106,6 +110,10 @@
                 {
                     "relacion": "mide",
                     "objetivo": "distancia"
+                },
+                {
+                    "relacion": "detecta",
+                    "objetivo": "obstáculos"
                 }
             ]
         },
@@ -117,11 +125,17 @@
         },
         {
             "palabra": "bateria",
-            "asociaciones": [],
+            "asociaciones": [
+                "fuente de energía"
+            ],
             "relaciones": [
                 {
                     "relacion": "produce",
                     "objetivo": "energia"
+                },
+                {
+                    "relacion": "produce",
+                    "objetivo": "calor"
                 }
             ]
         },
@@ -192,6 +206,30 @@
             "palabra": "gorrion",
             "asociaciones": [
                 "ave"
+            ]
+        },
+        {
+            "palabra": "sensor",
+            "asociaciones": [],
+            "relaciones": [
+                {
+                    "relacion": "mide",
+                    "objetivo": "temperatura"
+                },
+                {
+                    "relacion": "mide",
+                    "objetivo": "humedad"
+                }
+            ]
+        },
+        {
+            "palabra": "motor",
+            "asociaciones": [],
+            "relaciones": [
+                {
+                    "relacion": "mueve",
+                    "objetivo": "ruedas"
+                }
             ]
         }
     ]

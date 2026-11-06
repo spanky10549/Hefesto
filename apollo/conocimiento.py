@@ -5,11 +5,11 @@ Administra conceptos, asociaciones, sinónimos y relaciones,
 y busca conexiones entre conceptos.
 """
 
-from memoria.almacenamiento import (
-    cargar_json,
-    guardar_json,
-    ErrorAlmacenamiento
-)
+import os
+
+from memoria.base_datos import cargar_diccionario_sql, guardar_diccionario_sql
+
+from memoria.almacenamiento import cargar_json, ErrorAlmacenamiento
 
 from apollo.lenguaje import (
     normalizar_texto,
@@ -28,29 +28,51 @@ from apollo.lenguaje import (
 
 
 # ==========================================
-# ARCHIVO DEL DICCIONARIO
+# DÓNDE SE GUARDA EL DICCIONARIO
 # ==========================================
+# El diccionario vive en una base de datos SQLite (diccionario_hefesto.db).
+# El JSON de antes (diccionario_hefesto.json) solo se usa una vez:
+# si existe y todavía no hay base de datos, se pasa a ella.
 
 ARCHIVO_DICCIONARIO = "diccionario_hefesto.json"
 
 DICCIONARIO_INICIAL = {"palabras": []}
 
 
-def cargar_diccionario():
+def ruta_base_datos():
+    """'diccionario_hefesto.json' → 'diccionario_hefesto.db'"""
+    return os.path.splitext(ARCHIVO_DICCIONARIO)[0] + ".db"
+
+
+def migrar_desde_json():
+    """
+    Si hay un diccionario en JSON y todavía no hay base de datos,
+    lo copia a la base de datos. El JSON no se borra.
+    Devuelve True si migró algo.
+    """
+    if os.path.exists(ruta_base_datos()) or not os.path.exists(ARCHIVO_DICCIONARIO):
+        return False
+
     diccionario = cargar_json(ARCHIVO_DICCIONARIO, DICCIONARIO_INICIAL)
 
     if not isinstance(diccionario, dict) or not isinstance(
         diccionario.get("palabras"), list
     ):
         raise ErrorAlmacenamiento(
-            "El diccionario no tiene la estructura esperada."
+            "El diccionario JSON no tiene la estructura esperada."
         )
 
-    return diccionario
+    guardar_diccionario_sql(ruta_base_datos(), diccionario, normalizar_concepto)
+    return True
+
+
+def cargar_diccionario():
+    migrar_desde_json()
+    return cargar_diccionario_sql(ruta_base_datos())
 
 
 def guardar_diccionario(diccionario):
-    guardar_json(ARCHIVO_DICCIONARIO, diccionario)
+    guardar_diccionario_sql(ruta_base_datos(), diccionario, normalizar_concepto)
 
 
 # ==========================================
