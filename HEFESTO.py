@@ -41,6 +41,8 @@ from apollo.lenguaje import (
 )
 
 from apollo.lector import leer_archivo, guardar_hechos
+from apollo.definicion import definir
+from conversacion.redaccion import redactar_definicion
 from apollo.lenguaje import forma_singular
 
 from conversacion.contexto import aplicar_contexto, detectar_tema, crear_plantilla
@@ -1256,6 +1258,7 @@ HEFESTO: Esto es lo que sé hacer:
         recuerda Focus tendrá sensores de temperatura
 
   PREGUNTAR
+    define <algo>  /  qué es <algo>   te lo explico con mis palabras
     qué sabes de <algo>
     qué mide / controla / usa / necesita / produce ... <algo>
     con qué se comunica <algo>
@@ -1524,6 +1527,27 @@ def iniciar_hefesto():
             print("[0,1] →", hefesto.predecir([0, 1]))
             print("[1,0] →", hefesto.predecir([1, 0]))
             print("[1,1] →", hefesto.predecir([1, 1]))
+
+        # ======================================
+        # DEFINIR: "define pingüino", "qué es un pingüino"
+        # ======================================
+
+        elif comando_normalizado.replace("¿", "").replace("?", "").strip().startswith(
+            ("define ", "qué es ", "que es ", "qué son ", "que son ",
+             "qué significa ", "que significa ")
+        ):
+
+            pregunta = comando_normalizado.replace("¿", "").replace("?", "").strip()
+            concepto = limpiar_concepto(pregunta.split(" ", 1)[1])
+
+            # "qué es" deja la palabra "es" adelante: quitarla.
+            for inicio in ("es ", "son ", "significa "):
+                if concepto.startswith(inicio):
+                    concepto = limpiar_concepto(concepto[len(inicio):])
+
+            concepto = resolver_concepto(concepto)
+
+            print("HEFESTO: " + redactar_definicion(definir(concepto)))
 
         # ======================================
         # LEER DOCUMENTOS

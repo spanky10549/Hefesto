@@ -31,6 +31,11 @@ PRONOMBRES = {"él", "el", "ella", "ellos", "ellas", "eso", "esto", "esa", "ese"
 
 PREFIJOS_SABER = ("qué sabes de ", "que sabes de ")
 
+PREFIJOS_DEFINIR = (
+    "define ", "qué es ", "que es ", "qué son ", "que son ",
+    "qué significa ", "que significa "
+)
+
 PREFIJOS_INVERSA = ("quién ", "quien ", "qué cosa ", "que cosa ")
 
 # Si un "y ..." empieza con esto, es un comando y no un cambio de tema.
@@ -130,6 +135,10 @@ def aplicar_contexto(comando, tema, plantilla=None):
     if texto_sin_mas in ("qué sabes", "que sabes", "qué más", "que mas"):
         completado = "qué sabes de {tema}"
 
+    # "¿y qué es?", "defínelo"
+    elif texto in tuple(p.strip() for p in PREFIJOS_DEFINIR) + ("defínelo", "definelo"):
+        completado = "define {tema}"
+
     elif texto_sin_mas.startswith(PREFIJOS_SABER) and palabras[-1] in PRONOMBRES:
         completado = "qué sabes de {tema}"
 
@@ -179,8 +188,8 @@ def detectar_tema(comando):
     """
     texto = expandir_contracciones(_sin_signos_de_pregunta(comando))
 
-    # qué sabes de X
-    for prefijo in PREFIJOS_SABER:
+    # qué sabes de X, define X, qué es X
+    for prefijo in PREFIJOS_SABER + PREFIJOS_DEFINIR:
         if texto.startswith(prefijo):
             return limpiar_concepto(texto[len(prefijo):]) or None
 

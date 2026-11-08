@@ -143,3 +143,20 @@ def test_tambien_con_verbo_sigue_funcionando():
     completo, uso = aplicar_contexto("¿también puede nadar?", "pingüino", None)
 
     assert (completo, uso) == ("¿pingüino puede nadar?", True)
+
+
+# ==========================================
+# DEFINIR CON CONTEXTO
+# ==========================================
+
+def test_y_que_es():
+    assert aplicar_contexto("¿y qué es?", "pingüino") == ("define pingüino", True)
+
+
+@pytest.mark.parametrize("comando, tema", [
+    ("define pingüino", "pingüino"),
+    ("¿qué es un pingüino?", "pingüino"),
+    ("qué son los sensores", "sensores"),
+])
+def test_detecta_tema_al_definir(comando, tema):
+    assert detectar_tema(comando) == tema
