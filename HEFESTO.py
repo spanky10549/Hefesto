@@ -2084,11 +2084,14 @@ def iniciar_hefesto():
                 encontrado = True
                 print(f"HEFESTO: Lo que se relaciona con {palabra}:")
 
-                for inversa in inversas:
+                for inversa in inversas[:15]:
                     print(
                         f"- {inversa['sujeto']} → "
                         f"{inversa['relacion']} → {palabra}"
                     )
+
+                if len(inversas) > 15:
+                    print(f"- ... y {len(inversas) - 15} más.")
 
             if not encontrado:
 

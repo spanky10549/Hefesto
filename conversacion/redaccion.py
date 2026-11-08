@@ -134,6 +134,20 @@ def oracion(texto):
 
 PREPOSICIONES_FINALES = ("con", "a", "de", "por")
 
+# Con miles de conceptos (WordNet) las listas pueden ser enormes:
+# se muestran las primeras y se dice cuántas faltan.
+MAX_CATEGORIAS_DEDUCIDAS = 4
+MAX_EJEMPLOS = 8
+MAX_MENCIONES = 5
+
+
+def recortar(elementos, maximo):
+    """['a', 'b', 'c', 'd'] con máximo 2 → ['a', 'b', '2 más']"""
+    elementos = list(elementos)
+    if len(elementos) <= maximo:
+        return elementos
+    return elementos[:maximo] + [f"{len(elementos) - maximo} más"]
+
 
 def accion(verbo, objetivos, pistas):
     """
@@ -169,12 +183,21 @@ def redactar_definicion(datos):
     if datos["categorias"]:
         frases.append(oracion(f"es {unir(un(c) for c in datos['categorias'])}"))
 
-    por_via = {}
-    for categoria, via in datos["categorias_deducidas"]:
-        por_via.setdefault(via, []).append(categoria)
+    # Lo que es por consecuencia, en una sola frase y de lo más cercano
+    # a lo más lejano: "por eso también es un mamífero, un vertebrado y un animal"
+    deducidas = [categoria for categoria, _ in datos["categorias_deducidas"]]
 
-    for via, categorias in por_via.items():
-        frases.append(oracion(f"como es {via}, también es {unir(un(c) for c in categorias)}"))
+    if len(deducidas) == 1:
+        via = datos["categorias_deducidas"][0][1]
+        frases.append(oracion(f"como es {via}, también es {un(deducidas[0])}"))
+
+    elif deducidas:
+        cercanas = [un(c) for c in deducidas[:MAX_CATEGORIAS_DEDUCIDAS]]
+        if len(deducidas) > MAX_CATEGORIAS_DEDUCIDAS:
+            cercanas[-1] = f"{cercanas[-1]}, entre otras cosas"
+            frases.append(oracion("por eso también es " + ", ".join(cercanas)))
+        else:
+            frases.append(oracion("por eso también es " + unir(cercanas)))
 
     # Lo que sí y lo que no, juntos por verbo: "puede nadar, pero no puede volar"
     verbos = list(datos["hace"]) + [v for v in datos["no_hace"] if v not in datos["hace"]]
@@ -202,10 +225,13 @@ def redactar_definicion(datos):
 
     # Ejemplos: "ejemplos de ave: pingüino y gorrión"
     if datos["ejemplos"]:
-        frases.append(oracion(f"ejemplos de {concepto}: {unir(datos['ejemplos'])}"))
+        ejemplos = recortar(datos["ejemplos"], MAX_EJEMPLOS)
+        frases.append(oracion(f"ejemplos de {concepto}: {unir(ejemplos)}"))
 
     # Quién lo menciona: "la raspberry pi se comunica con el sensor"
-    for sujeto, verbo in datos["lo_mencionan"]:
+    sobran = len(datos["lo_mencionan"]) - MAX_MENCIONES
+
+    for sujeto, verbo in datos["lo_mencionan"][:MAX_MENCIONES]:
 
         quien = el(sujeto, pistas.get(sujeto))
 
@@ -215,6 +241,9 @@ def redactar_definicion(datos):
             frase = f"{quien} {verbo} {el(concepto, pistas.get(concepto))}"
 
         frases.append(oracion(frase))
+
+    if sobran > 0:
+        frases.append(oracion(f"y {sobran} cosa(s) más se relacionan con {el(concepto, pistas.get(concepto))}"))
 
     titulo = concepto[0].upper() + concepto[1:]
 

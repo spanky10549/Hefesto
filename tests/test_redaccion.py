@@ -109,3 +109,29 @@ def test_concepto_desconocido():
     assert redactar_definicion(datos(conocido=False, concepto="unicornio")) == (
         "Todavía no sé qué es unicornio."
     )
+
+
+# ==========================================
+# RESUMIR CUANDO HAY MUCHO (WordNet)
+# ==========================================
+
+def test_resume_cadenas_largas_de_categorias():
+    texto = redactar_definicion(datos(
+        concepto="perro",
+        categorias=["cánido"],
+        categorias_deducidas=[
+            ("mamífero", "cánido"), ("vertebrado", "mamífero"), ("animal", "vertebrado"),
+            ("organismo", "animal"), ("ser", "organismo"),
+        ],
+    ))
+
+    assert "Por eso también es un mamífero, un vertebrado, un animal, un organismo, entre otras cosas." in texto
+
+
+def test_recorta_listas_de_ejemplos():
+    texto = redactar_definicion(datos(
+        concepto="árbol",
+        ejemplos=[f"árbol{i}" for i in range(20)],
+    ))
+
+    assert "y 12 más." in texto
