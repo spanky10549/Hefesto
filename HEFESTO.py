@@ -42,6 +42,7 @@ from apollo.lenguaje import (
 
 from apollo.lector import leer_archivo, guardar_hechos
 from apollo.definicion import definir
+from calculo.aritmetica import calcular, extraer_operacion, ErrorCalculo
 from conversacion.redaccion import redactar_definicion
 from apollo.lenguaje import forma_singular
 
@@ -1239,6 +1240,30 @@ def parsear_pregunta_si_no(comando):
 
 
 # ==========================================
+# CALCULAR
+# ==========================================
+
+def mostrar_calculo(operacion):
+    """Resuelve una operación y explica cada paso."""
+    try:
+        r = calcular(operacion)
+    except ErrorCalculo as error:
+        print(f"HEFESTO: No pude calcular eso: {error}")
+        return
+
+    print(f"HEFESTO: {r['expresion']} = {r['resultado_texto']}")
+
+    if len(r["pasos"]) <= 1:
+        return
+
+    for numero, paso in enumerate(r["pasos"], start=1):
+        razon = f"   ({paso['razon']})" if paso["razon"] else ""
+        print(f"  {numero}. {paso['operacion']}{razon}")
+        if numero < len(r["pasos"]):
+            print(f"     → {paso['queda']}")
+
+
+# ==========================================
 # AYUDA
 # ==========================================
 
@@ -1290,6 +1315,12 @@ HEFESTO: Esto es lo que sé hacer:
     olvida todo sobre <algo>
     olvida el recuerdo <texto>
     Para corregir: olvida lo incorrecto y aprende lo correcto.
+
+  CALCULAR (te explico el orden de las operaciones)
+    cuánto es 3 + 4 × 2
+    calcula (2 + 3)^2 − raíz de 16
+    cuánto es treinta y dos entre ocho
+    3 + 4 * 2                 (también así, directo)
 
   RAZONAR
     ¿<algo> <relación> <algo>?      pregunta de sí o no
@@ -1527,6 +1558,14 @@ def iniciar_hefesto():
             print("[0,1] →", hefesto.predecir([0, 1]))
             print("[1,0] →", hefesto.predecir([1, 0]))
             print("[1,1] →", hefesto.predecir([1, 1]))
+
+        # ======================================
+        # CALCULAR: "cuánto es 3 + 4 × 2", "3+4*2"
+        # ======================================
+
+        elif extraer_operacion(comando) is not None:
+
+            mostrar_calculo(extraer_operacion(comando))
 
         # ======================================
         # DEFINIR: "define pingüino", "qué es un pingüino"
