@@ -177,3 +177,46 @@ def test_existe_concepto_por_objetivo(carpeta):
 
     assert apollo.existe_concepto("la temperatura")
     assert not apollo.existe_concepto("unicornio")
+
+
+# ==========================================
+# ESCRIBIR SOLO LO QUE CAMBIA
+# ==========================================
+
+def ids_de_conceptos(carpeta):
+    conexion = sqlite3.connect(carpeta / "diccionario_hefesto.db")
+    filas = conexion.execute("SELECT id, palabra FROM conceptos ORDER BY orden").fetchall()
+    conexion.close()
+    return filas
+
+
+def test_aprender_no_reescribe_lo_demas(carpeta):
+    apollo.aprender_relacion("sensor", "mide", "luz")
+    apollo.aprender_relacion("motor", "mueve", "ruedas")
+    antes = ids_de_conceptos(carpeta)
+
+    apollo.aprender_relacion("sensor", "detecta", "movimiento")
+
+    # Los conceptos conservan su id: no se borraron y volvieron a crear.
+    assert ids_de_conceptos(carpeta) == antes
+
+
+def test_lo_nuevo_va_al_final(carpeta):
+    apollo.aprender_relacion("sensor", "mide", "luz")
+    apollo.aprender_relacion("motor", "mueve", "ruedas")
+    apollo.aprender_relacion("sensor", "detecta", "movimiento")
+
+    assert [p for _, p in ids_de_conceptos(carpeta)] == ["sensor", "motor"]
+    assert [r["objetivo"] for r in apollo.buscar_relaciones("sensor")] == [
+        "luz", "movimiento"
+    ]
+
+
+def test_reemplazar_es_todo_o_nada(carpeta):
+    apollo.aprender_relacion("sensor", "pertenece a", "rover")
+
+    apollo.aprender_relacion("sensor", "pertenece a", "dron", reemplazar=True)
+
+    assert apollo.buscar_relaciones("sensor") == [
+        {"relacion": "pertenece a", "objetivo": "dron"}
+    ]

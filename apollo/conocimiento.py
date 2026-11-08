@@ -16,7 +16,16 @@ from memoria.base_datos import (
     relaciones_sql,
     inversas_sql,
     nombres_sql,
-    existe_sql
+    existe_sql,
+    buscar_id_sql,
+    ids_por_clave_sql,
+    filas_sql,
+    crear_concepto_sql,
+    agregar_texto_sql,
+    agregar_relacion_sql,
+    borrar_filas_sql,
+    borrar_conceptos_sql,
+    contar_menciones_sql
 )
 
 from memoria.almacenamiento import cargar_json, ErrorAlmacenamiento
@@ -169,8 +178,6 @@ def aprender_palabra(palabra, asociacion):
         "vacio"     faltan datos
     """
 
-    diccionario = cargar_diccionario()
-
     palabra = forma_singular(palabra)
     asociacion = asociacion.strip()
 
@@ -179,32 +186,27 @@ def aprender_palabra(palabra, asociacion):
 
     datos = {"palabra": palabra, "asociacion": asociacion}
 
-    for entrada in diccionario["palabras"]:
+    # ¿Ya existe un concepto con ese nombre? (el primero, si hay repetidos)
+    existentes = ids_por_clave_sql(base(), normalizar_concepto(palabra))
 
-        if normalizar_concepto(entrada.get("palabra", "")) == normalizar_concepto(palabra):
+    if existentes:
 
-            entrada.setdefault("asociaciones", [])
+        concepto_id = existentes[0][0]
 
-            ya_estaba = any(
-                normalizar_concepto(a) == normalizar_concepto(asociacion)
-                for a in entrada["asociaciones"]
-                if isinstance(a, str)
-            )
+        ya_estaba = any(
+            normalizado == normalizar_concepto(asociacion)
+            for _, _, normalizado in filas_sql(base(), "asociaciones", [concepto_id])
+        )
 
-            if ya_estaba:
-                return resultado("ya_sabia", **datos)
+        if ya_estaba:
+            return resultado("ya_sabia", **datos)
 
-            entrada["asociaciones"].append(asociacion)
-            guardar_diccionario(diccionario)
+        agregar_texto_sql(base(), "asociaciones", concepto_id, asociacion, normalizar_concepto)
 
-            return resultado("asociada", **datos)
+        return resultado("asociada", **datos)
 
-    diccionario["palabras"].append({
-        "palabra": palabra,
-        "asociaciones": [asociacion]
-    })
-
-    guardar_diccionario(diccionario)
+    concepto_id = crear_concepto_sql(base(), palabra, normalizar_concepto)
+    agregar_texto_sql(base(), "asociaciones", concepto_id, asociacion, normalizar_concepto)
 
     return resultado("nueva", **datos)
 
@@ -221,8 +223,6 @@ def aprender_sinonimo(palabra, sinonimo):
         "iguales"        los dos términos son el mismo
         "vacio"          faltan datos
     """
-    diccionario = cargar_diccionario()
-
     palabra = limpiar_concepto(palabra)
     sinonimo = limpiar_concepto(sinonimo)
 
@@ -234,25 +234,22 @@ def aprender_sinonimo(palabra, sinonimo):
     if normalizar_concepto(palabra) == normalizar_concepto(sinonimo):
         return resultado("iguales", **datos)
 
-    # Buscar DENTRO del mismo diccionario que vamos a guardar.
-    entrada = buscar_entrada(palabra, diccionario)
+    concepto = buscar_id_sql(base(), normalizar_concepto(palabra))
 
-    if entrada is None:
+    if concepto is None:
         return resultado("desconocido", **datos)
 
-    otra = buscar_entrada(sinonimo, diccionario)
+    otro = buscar_id_sql(base(), normalizar_concepto(sinonimo))
 
-    if otra is entrada:
+    if otro is not None and otro[0] == concepto[0]:
         return resultado("ya_sabia", **datos)     # ya eran el mismo concepto
 
-    if otra is not None:
+    if otro is not None:
         return resultado("ya_registrado", **datos)
 
-    entrada.setdefault("sinonimos", []).append(sinonimo)
+    agregar_texto_sql(base(), "sinonimos", concepto[0], sinonimo, normalizar_concepto)
 
-    guardar_diccionario(diccionario)
-
-    return resultado("aprendido", palabra=entrada["palabra"], sinonimo=sinonimo)
+    return resultado("aprendido", palabra=concepto[1], sinonimo=sinonimo)
 
 
 # ==========================================
@@ -310,8 +307,6 @@ def aprender_relacion(sujeto, relacion, objeto, negada=False, reemplazar=False):
     - Una relación única ya tenía otro objetivo ("pertenece a").
     """
 
-    diccionario = cargar_diccionario()
-
     # Guardamos la versión limpia (con acentos) y comparamos
     # con la versión normalizada (sin acentos ni plurales).
     # El sujeto siempre en singular ("las aves" → "ave").
@@ -339,74 +334,40 @@ def aprender_relacion(sujeto, relacion, objeto, negada=False, reemplazar=False):
     if normalizar_concepto(sujeto) == objeto_norm:
         return resultado("mismo_concepto", **datos)
 
-    palabras = diccionario.get("palabras", [])
+    # El concepto del sujeto (por nombre o sinónimo); si no existe, se crea.
+    concepto = buscar_id_sql(base(), normalizar_concepto(sujeto))
+    concepto_id = concepto[0] if concepto else None
 
-    entrada_sujeto = None
+    conflictos = []   # (rowid, objetivo, negada)
 
-    for entrada in palabras:
+    if concepto_id is not None:
 
-        if not isinstance(entrada, dict):
-            continue
+        for rowid, relacion_guardada, objetivo, objetivo_norm, negada_guardada in filas_sql(
+            base(), "relaciones", [concepto_id]
+        ):
 
-        if buscar_entrada(sujeto, {"palabras": [entrada]}) is not None:
-            entrada_sujeto = entrada
-            break
+            if normalizar_relacion(relacion_guardada) != relacion:
+                continue
 
-    if entrada_sujeto is None:
+            mismo_objetivo = objetivo_norm == objeto_norm
+            mismo_sentido = bool(negada_guardada) == negada
 
-        entrada_sujeto = {
-            "palabra": sujeto,
-            "asociaciones": [],
-            "relaciones": []
-        }
+            # 1. Ya lo sabía exactamente igual.
+            if mismo_objetivo and mismo_sentido:
+                return resultado("ya_sabia", **datos)
 
-        palabras.append(entrada_sujeto)
-
-    relaciones = entrada_sujeto.get("relaciones", [])
-
-    if not isinstance(relaciones, list):
-        relaciones = []
-
-    entrada_sujeto["relaciones"] = relaciones
-
-    conflictos = []
-
-    for existente in relaciones:
-
-        if not isinstance(existente, dict):
-            continue
-
-        objetivo_existente = existente.get("objetivo")
-        relacion_existente = existente.get("relacion")
-
-        if not isinstance(objetivo_existente, str):
-            continue
-
-        if not isinstance(relacion_existente, str):
-            continue
-
-        if normalizar_relacion(relacion_existente) != relacion:
-            continue
-
-        mismo_objetivo = normalizar_concepto(objetivo_existente) == objeto_norm
-        mismo_sentido = es_negada(existente) == negada
-
-        # 1. Ya lo sabía exactamente igual.
-        if mismo_objetivo and mismo_sentido:
-            return resultado("ya_sabia", **datos)
-
-        # 2. Lo opuesto, o 3. una relación única con otro objetivo.
-        contradice = (
-            (mismo_objetivo and not mismo_sentido)
-            or (
-                relacion in RELACIONES_UNICAS
-                and not negada
-                and not es_negada(existente)
+            # 2. Lo opuesto, o 3. una relación única con otro objetivo.
+            contradice = (
+                (mismo_objetivo and not mismo_sentido)
+                or (
+                    relacion in RELACIONES_UNICAS
+                    and not negada
+                    and not negada_guardada
+                )
             )
-        )
 
-        if contradice:
-            conflictos.append(existente)
+            if contradice:
+                conflictos.append((rowid, objetivo, bool(negada_guardada)))
 
     if conflictos and not reemplazar:
 
@@ -416,25 +377,23 @@ def aprender_relacion(sujeto, relacion, objeto, negada=False, reemplazar=False):
                 {
                     "sujeto": sujeto,
                     "relacion": relacion,
-                    "objeto": c["objetivo"],
-                    "negada": es_negada(c)
+                    "objeto": objetivo,
+                    "negada": negada_guardada
                 }
-                for c in conflictos
+                for _, objetivo, negada_guardada in conflictos
             ],
             **datos
         )
 
-    for existente in conflictos:
-        relaciones.remove(existente)
+    if concepto_id is None:
+        concepto_id = crear_concepto_sql(base(), sujeto, normalizar_concepto)
 
-    nueva = {"relacion": relacion, "objetivo": objeto}
-
-    if negada:
-        nueva["negada"] = True
-
-    relaciones.append(nueva)
-
-    guardar_diccionario(diccionario)
+    # Borrar los conflictos (si se pidió reemplazar) y agregar la nueva,
+    # todo en una sola transacción.
+    agregar_relacion_sql(
+        base(), concepto_id, relacion, objeto, negada, normalizar_concepto,
+        borrar_rowids=[rowid for rowid, _, _ in conflictos]
+    )
 
     return resultado("aprendida", reemplazadas=len(conflictos), **datos)
 
@@ -732,17 +691,15 @@ def sugerir_concepto(texto):
 # devuelven qué borraron y HEFESTO decide cómo decírtelo.
 # Así APOLLO puede usarse desde cualquier otra inteligencia.
 
-def _entradas_del_concepto(concepto, diccionario):
-    """Entradas del diccionario de un concepto (incluye datos repetidos antiguos)."""
-    entrada = buscar_entrada(concepto, diccionario)
-    principal = entrada.get("palabra", concepto) if entrada else concepto
-    buscado = normalizar_concepto(principal)
+def _ids_del_concepto(concepto):
+    """
+    [(id, palabra), ...] de un concepto, buscando por nombre o sinónimo.
+    Incluye entradas repetidas de datos antiguos ("sensor" y "sensores").
+    """
+    encontrado = buscar_id_sql(base(), normalizar_concepto(concepto))
+    principal = encontrado[1] if encontrado else concepto
 
-    return [
-        e for e in diccionario["palabras"]
-        if isinstance(e, dict)
-        and normalizar_concepto(e.get("palabra", "")) == buscado
-    ]
+    return ids_por_clave_sql(base(), normalizar_concepto(principal))
 
 
 def olvidar_relacion(sujeto, relacion, objeto, negada=False):
@@ -751,33 +708,21 @@ def olvidar_relacion(sujeto, relacion, objeto, negada=False):
     si negada=True).
     Devuelve cuántas relaciones borró (0 si no la conocía).
     """
-    diccionario = cargar_diccionario()
-
     relacion = normalizar_relacion(relacion)
     objeto_norm = normalizar_concepto(objeto)
-    borradas = 0
 
-    for entrada in _entradas_del_concepto(sujeto, diccionario):
+    ids = [cid for cid, _ in _ids_del_concepto(sujeto)]
 
-        antes = entrada.get("relaciones", [])
+    a_borrar = [
+        rowid
+        for rowid, relacion_guardada, _, objetivo_norm, negada_guardada
+        in filas_sql(base(), "relaciones", ids)
+        if normalizar_relacion(relacion_guardada) == relacion
+        and objetivo_norm == objeto_norm
+        and bool(negada_guardada) == negada
+    ]
 
-        despues = [
-            r for r in antes
-            if not (
-                isinstance(r, dict)
-                and normalizar_relacion(r.get("relacion", "")) == relacion
-                and normalizar_concepto(r.get("objetivo", "")) == objeto_norm
-                and es_negada(r) == negada
-            )
-        ]
-
-        borradas += len(antes) - len(despues)
-        entrada["relaciones"] = despues
-
-    if borradas:
-        guardar_diccionario(diccionario)
-
-    return borradas
+    return borrar_filas_sql(base(), "relaciones", a_borrar)
 
 
 def olvidar_categoria(concepto, categoria):
@@ -785,25 +730,17 @@ def olvidar_categoria(concepto, categoria):
     Borra 'concepto es categoría' (guardado como asociación o como relación 'es').
     Devuelve cuántas borró.
     """
-    diccionario = cargar_diccionario()
-
     categoria_norm = normalizar_concepto(categoria)
-    borradas = 0
 
-    for entrada in _entradas_del_concepto(concepto, diccionario):
+    ids = [cid for cid, _ in _ids_del_concepto(concepto)]
 
-        asociaciones = entrada.get("asociaciones", [])
+    a_borrar = [
+        rowid
+        for rowid, _, normalizado in filas_sql(base(), "asociaciones", ids)
+        if normalizado == categoria_norm
+    ]
 
-        restantes = [
-            a for a in asociaciones
-            if not (isinstance(a, str) and normalizar_concepto(a) == categoria_norm)
-        ]
-
-        borradas += len(asociaciones) - len(restantes)
-        entrada["asociaciones"] = restantes
-
-    if borradas:
-        guardar_diccionario(diccionario)
+    borradas = borrar_filas_sql(base(), "asociaciones", a_borrar)
 
     return borradas + olvidar_relacion(concepto, "es", categoria)
 
@@ -813,25 +750,20 @@ def olvidar_sinonimo(a, b):
     Borra que a y b son sinónimos (en cualquier orden).
     Devuelve True si lo borró.
     """
-    diccionario = cargar_diccionario()
-
     for concepto, sinonimo in ((a, b), (b, a)):
 
         sinonimo_norm = normalizar_concepto(sinonimo)
+        ids = [cid for cid, _ in _ids_del_concepto(concepto)]
 
-        for entrada in _entradas_del_concepto(concepto, diccionario):
+        a_borrar = [
+            rowid
+            for rowid, _, normalizado in filas_sql(base(), "sinonimos", ids)
+            if normalizado == sinonimo_norm
+        ]
 
-            sinonimos = entrada.get("sinonimos", [])
-
-            restantes = [
-                s for s in sinonimos
-                if normalizar_concepto(s) != sinonimo_norm
-            ]
-
-            if len(restantes) != len(sinonimos):
-                entrada["sinonimos"] = restantes
-                guardar_diccionario(diccionario)
-                return True
+        if a_borrar:
+            borrar_filas_sql(base(), "sinonimos", a_borrar)
+            return True
 
     return False
 
@@ -843,33 +775,17 @@ def olvidar_concepto(concepto):
     Devuelve (nombre borrado, cuántas relaciones de otros conceptos
     todavía lo mencionan), o (None, 0) si no lo conocía.
     """
-    diccionario = cargar_diccionario()
+    conceptos = _ids_del_concepto(concepto)
 
-    entradas = _entradas_del_concepto(concepto, diccionario)
-
-    if not entradas:
+    if not conceptos:
         return None, 0
 
-    nombre = entradas[0].get("palabra", concepto)
+    nombre = conceptos[0][1]
 
-    diccionario["palabras"] = [
-        e for e in diccionario["palabras"] if e not in entradas
-    ]
-
-    guardar_diccionario(diccionario)
+    borrar_conceptos_sql(base(), [cid for cid, _ in conceptos])
 
     # ¿Quién más lo sigue mencionando?
-    nombre_norm = normalizar_concepto(nombre)
-    menciones = sum(
-        1
-        for e in diccionario["palabras"]
-        if isinstance(e, dict)
-        for r in e.get("relaciones", [])
-        if isinstance(r, dict)
-        and normalizar_concepto(r.get("objetivo", "")) == nombre_norm
-    )
-
-    return nombre, menciones
+    return nombre, contar_menciones_sql(base(), normalizar_concepto(nombre))
 
 
 # ==========================================

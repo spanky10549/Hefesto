@@ -347,3 +347,166 @@ def existe_sql(ruta, clave):
         """, (clave, clave, clave)).fetchone()[0] == 1
 
     return _con_conexion(ruta, accion, "No pude consultar la base de datos")
+
+
+# ==========================================
+# CAMBIOS PEQUEÑOS (rápidos)
+# ==========================================
+# En lugar de reescribir todo el diccionario, estas funciones solo
+# insertan o borran las filas que cambian. Cada una es una transacción.
+
+TABLAS_HIJAS = ("asociaciones", "sinonimos", "relaciones")
+
+
+def buscar_id_sql(ruta, clave):
+    """(id, palabra) del primer concepto con ese nombre o sinónimo, o None."""
+    def accion(conexion):
+        return conexion.execute("""
+            SELECT id, palabra FROM conceptos c
+            WHERE c.normalizado = ?
+               OR EXISTS (SELECT 1 FROM sinonimos s
+                          WHERE s.concepto_id = c.id AND s.normalizado = ?)
+            ORDER BY c.orden
+            LIMIT 1
+        """, (clave, clave)).fetchone()
+
+    return _con_conexion(ruta, accion, "No pude consultar la base de datos")
+
+
+def ids_por_clave_sql(ruta, clave):
+    """[(id, palabra), ...] de los conceptos que se llaman exactamente así."""
+    def accion(conexion):
+        return conexion.execute(
+            "SELECT id, palabra FROM conceptos WHERE normalizado = ? ORDER BY orden",
+            (clave,)
+        ).fetchall()
+
+    return _con_conexion(ruta, accion, "No pude consultar la base de datos")
+
+
+def filas_sql(ruta, tabla, ids):
+    """
+    Las filas de una tabla hija para esos conceptos, con su rowid
+    (el número interno de fila que SQLite le da a cada una):
+
+        asociaciones / sinonimos → (rowid, texto, normalizado)
+        relaciones               → (rowid, relacion, objetivo,
+                                    objetivo_normalizado, negada)
+    """
+    assert tabla in TABLAS_HIJAS
+    ids = list(ids)
+    if not ids:
+        return []
+
+    # "t." indica la tabla: "conceptos" también tiene "normalizado".
+    columnas = (
+        "t.relacion, t.objetivo, t.objetivo_normalizado, t.negada"
+        if tabla == "relaciones" else "t.texto, t.normalizado"
+    )
+    marcas = ", ".join("?" for _ in ids)
+
+    def accion(conexion):
+        return conexion.execute(f"""
+            SELECT t.rowid, {columnas}
+            FROM {tabla} t JOIN conceptos c ON c.id = t.concepto_id
+            WHERE t.concepto_id IN ({marcas})
+            ORDER BY c.orden, t.orden
+        """, ids).fetchall()
+
+    return _con_conexion(ruta, accion, "No pude consultar la base de datos")
+
+
+def _siguiente_orden(conexion, tabla, concepto_id=None):
+    if concepto_id is None:
+        fila = conexion.execute(f"SELECT MAX(orden) FROM {tabla}").fetchone()
+    else:
+        fila = conexion.execute(
+            f"SELECT MAX(orden) FROM {tabla} WHERE concepto_id = ?", (concepto_id,)
+        ).fetchone()
+    return 0 if fila[0] is None else fila[0] + 1
+
+
+def crear_concepto_sql(ruta, palabra, normalizar):
+    """Crea un concepto vacío al final y devuelve su id."""
+    def accion(conexion):
+        with conexion:
+            cursor = conexion.execute(
+                "INSERT INTO conceptos (palabra, normalizado, orden) VALUES (?, ?, ?)",
+                (palabra, normalizar(palabra), _siguiente_orden(conexion, "conceptos"))
+            )
+            return cursor.lastrowid
+
+    return _con_conexion(ruta, accion, "No pude guardar en la base de datos")
+
+
+def agregar_texto_sql(ruta, tabla, concepto_id, texto, normalizar):
+    """Agrega una asociación o un sinónimo al final de un concepto."""
+    assert tabla in ("asociaciones", "sinonimos")
+
+    def accion(conexion):
+        with conexion:
+            conexion.execute(
+                f"INSERT INTO {tabla} VALUES (?, ?, ?, ?)",
+                (concepto_id, texto, normalizar(texto),
+                 _siguiente_orden(conexion, tabla, concepto_id))
+            )
+
+    _con_conexion(ruta, accion, "No pude guardar en la base de datos")
+
+
+def agregar_relacion_sql(ruta, concepto_id, relacion, objetivo, negada,
+                         normalizar, borrar_rowids=()):
+    """
+    Agrega una relación al final de un concepto. Si se pasan
+    borrar_rowids, primero borra esas relaciones: todo en UNA
+    transacción, para que un reemplazo nunca quede a medias.
+    """
+    def accion(conexion):
+        with conexion:
+            for rowid in borrar_rowids:
+                conexion.execute("DELETE FROM relaciones WHERE rowid = ?", (rowid,))
+
+            conexion.execute(
+                "INSERT INTO relaciones VALUES (?, ?, ?, ?, ?, ?)",
+                (concepto_id, relacion, objetivo, normalizar(objetivo),
+                 1 if negada else 0,
+                 _siguiente_orden(conexion, "relaciones", concepto_id))
+            )
+
+    _con_conexion(ruta, accion, "No pude guardar en la base de datos")
+
+
+def borrar_filas_sql(ruta, tabla, rowids):
+    """Borra filas concretas de una tabla hija. Devuelve cuántas borró."""
+    assert tabla in TABLAS_HIJAS
+    rowids = list(rowids)
+
+    def accion(conexion):
+        with conexion:
+            for rowid in rowids:
+                conexion.execute(f"DELETE FROM {tabla} WHERE rowid = ?", (rowid,))
+        return len(rowids)
+
+    return _con_conexion(ruta, accion, "No pude borrar de la base de datos")
+
+
+def borrar_conceptos_sql(ruta, ids):
+    """Borra conceptos completos (sus asociaciones, sinónimos y relaciones se van en cascada)."""
+    ids = list(ids)
+
+    def accion(conexion):
+        with conexion:
+            for concepto_id in ids:
+                conexion.execute("DELETE FROM conceptos WHERE id = ?", (concepto_id,))
+
+    _con_conexion(ruta, accion, "No pude borrar de la base de datos")
+
+
+def contar_menciones_sql(ruta, clave):
+    """Cuántas relaciones apuntan a este concepto."""
+    def accion(conexion):
+        return conexion.execute(
+            "SELECT COUNT(*) FROM relaciones WHERE objetivo_normalizado = ?", (clave,)
+        ).fetchone()[0]
+
+    return _con_conexion(ruta, accion, "No pude consultar la base de datos")
