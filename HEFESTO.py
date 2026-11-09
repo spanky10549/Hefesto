@@ -41,8 +41,8 @@ from apollo.lenguaje import (
 )
 
 from apollo.lector import leer_archivo, guardar_hechos
-from apollo.definicion import definir
-from calculo.aritmetica import calcular, extraer_operacion, ErrorCalculo
+from calculo.aritmetica import extraer_operacion
+from gaia import crear_ecosistema, OK, RECHAZADO
 from conversacion.redaccion import redactar_definicion
 from apollo.lenguaje import forma_singular
 
@@ -58,10 +58,47 @@ from apollo.razonamiento import (
     ancestros,
     relaciones_inferidas,
     relaciones_inversas,
-    responder,
     SI,
     NO
 )
+
+# ==========================================
+# ECOSISTEMA FOCUS
+# ==========================================
+
+# GAIA conecta a HEFESTO con las demás inteligencias. HEFESTO ya no
+# llama directo a APOLLO ni a la calculadora: les manda mensajes.
+ecosistema = crear_ecosistema()
+
+
+def pedir(para, accion, **datos):
+    """
+    Le pide algo a otra inteligencia a través de GAIA.
+    Devuelve los datos si salió bien; si no, explica qué pasó y
+    devuelve None.
+    """
+    respuesta = ecosistema.pedir("hefesto", para, accion, **datos)
+
+    if respuesta["estado"] == OK:
+        return respuesta["datos"]
+
+    if respuesta["estado"] == RECHAZADO:
+        print(f"HEFESTO: No pude: {respuesta['detalle']}")
+    else:
+        print(
+            f"HEFESTO: Algo falló al pedirle '{accion}' a {para.upper()} "
+            f"({respuesta['detalle']})."
+        )
+
+    return None
+
+
+def mostrar_ecosistema():
+    """Quién está conectado a GAIA y qué sabe hacer."""
+    print("HEFESTO: Inteligencias conectadas a GAIA:")
+    for nombre, ficha in ecosistema.directorio().items():
+        print(f"  {nombre.upper()}: {ficha['descripcion']}")
+        print(f"    sabe: {', '.join(ficha['acciones'])}")
 
 # ==========================================
 # FUNCIÓN DE ACTIVACIÓN
@@ -1245,10 +1282,8 @@ def parsear_pregunta_si_no(comando):
 
 def mostrar_calculo(operacion):
     """Resuelve una operación y explica cada paso."""
-    try:
-        r = calcular(operacion)
-    except ErrorCalculo as error:
-        print(f"HEFESTO: No pude calcular eso: {error}")
+    r = pedir("calculadora", "calcular", operacion=operacion)
+    if r is None:
         return
 
     print(f"HEFESTO: {r['expresion']} = {r['resultado_texto']}")
@@ -1336,6 +1371,7 @@ HEFESTO: Esto es lo que sé hacer:
 
   SISTEMA
     ordena tu diccionario   une repetidos y pasa conceptos a singular
+    ecosistema              quién está conectado a GAIA y qué sabe hacer
     estado, quién eres, ayuda, salir
 
   Relaciones que entiendo:
@@ -1548,6 +1584,14 @@ def iniciar_hefesto():
             mostrar_ayuda()
 
         # ======================================
+        # ECOSISTEMA
+        # ======================================
+
+        elif comando_normalizado in ("ecosistema", "quien esta conectado"):
+
+            mostrar_ecosistema()
+
+        # ======================================
         # PROBAR XOR
         # ======================================
 
@@ -1586,7 +1630,9 @@ def iniciar_hefesto():
 
             concepto = resolver_concepto(concepto)
 
-            print("HEFESTO: " + redactar_definicion(definir(concepto)))
+            datos = pedir("apollo", "definir", concepto=concepto)
+            if datos is not None:
+                print("HEFESTO: " + redactar_definicion(datos))
 
         # ======================================
         # LEER DOCUMENTOS
@@ -2239,7 +2285,14 @@ def iniciar_hefesto():
             sujeto = resolver_concepto(sujeto)
             objeto = resolver_concepto(objeto)
 
-            respuesta, cadena = responder(sujeto, verbo, objeto)
+            datos = pedir(
+                "apollo", "responder",
+                sujeto=sujeto, relacion=verbo, objeto=objeto
+            )
+            if datos is None:
+                continue
+
+            respuesta, cadena = datos["respuesta"], datos["cadena"]
 
             if respuesta == SI:
                 inicio = "Sí"

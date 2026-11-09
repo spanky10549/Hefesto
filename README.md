@@ -31,7 +31,11 @@ HEFESTO: No. Me lo enseñaste:
   - *Sí, no o no sé*: sin información no inventa; responde "no lo sé" (suposición de mundo abierto).
 - **Detectar contradicciones** y preguntar antes de reemplazar lo que ya sabía.
 - **Olvidar y corregir** relaciones, sinónimos, conceptos completos y recuerdos.
-- **Seguir una conversación**: recuerda el tema para entender preguntas como "¿y qué tiene?".
+- **Seguir una conversación**: recuerda el tema (incluso entre sesiones) para entender preguntas como "¿y qué tiene?" o "¿y el gorrión también?".
+- **Explicar con sus palabras**: `define pingüino` arma una definición juntando lo que sabe y lo que deduce ("Es un ave. Puede nadar, pero no puede volar. Por ser ave, tiene plumas.").
+- **Leer documentos**: extrae hechos de un `.txt` y te muestra lo que entendió antes de guardarlo.
+- **Base de datos SQLite** con consultas directas e índices: con 5,000 conceptos, buscar pasó de ~1 s a ~2 ms y aprender de ~300 ms a ~3 ms.
+- **Diccionario de casi 17,000 conceptos** importado de WordNet en español, conectado con lo que le enseñas: si le dices que el pingüino es un ave, deduce solo que es un vertebrado y un animal.
 - **Red neuronal propia**, escrita a mano con NumPy (propagación hacia adelante y retropropagación), que resuelve XOR.
 
 ## Arquitectura
@@ -41,18 +45,46 @@ Cada parte del código corresponde a una inteligencia o servicio de FOCUS:
 ```
 Cerebro/
 ├── HEFESTO.py              Interfaz: entiende comandos y responde
+├── gaia/                   GAIA: coordina a las inteligencias con mensajes
+│   ├── mensajes.py         Órdenes, respuestas y eventos (listos para JSON)
+│   ├── inteligencia.py     El molde que comparten todas las inteligencias
+│   └── nucleo.py           Directorio, entrega, fallos, eventos e historial
 ├── apollo/                 APOLLO: gestión del conocimiento
 │   ├── conocimiento.py     Conceptos, relaciones, sinónimos, caminos, olvido
 │   ├── lenguaje.py         Normalización, verbos y distancia de edición
-│   └── razonamiento.py     Herencia, excepciones, inversas y sí/no/no sé
+│   ├── razonamiento.py     Herencia, excepciones, inversas y sí/no/no sé
+│   ├── definicion.py       Junta todo lo que se sabe de un concepto
+│   ├── lector.py           Extrae hechos de documentos
+│   ├── importador.py       Importa conocimiento en bloque
+│   └── servicio.py         APOLLO como inteligencia conectada a GAIA
+├── calculo/
+│   ├── aritmetica.py       Calculadora exacta, paso a paso
+│   └── servicio.py         La calculadora como herramienta de GAIA
 ├── conversacion/
-│   └── contexto.py         Tema de la conversación (funciones puras)
+│   ├── contexto.py         Tema y última pregunta (funciones puras)
+│   ├── estado.py           Recuerda la conversación entre sesiones
+│   └── redaccion.py        Redacta en español: artículos, género, listas
 ├── memoria/
-│   └── almacenamiento.py   Guardado atómico y validación de JSON
+│   ├── almacenamiento.py   Guardado atómico de JSON
+│   └── base_datos.py       SQLite: tablas, índices, migraciones y consultas
+├── herramientas/
+│   └── importar_wordnet.py Importa WordNet en español
 └── tests/                  Pruebas automáticas con pytest
 ```
 
-Las dependencias van en un solo sentido: `HEFESTO → APOLLO → memoria`. APOLLO no sabe que HEFESTO existe, así que cualquier otra inteligencia de FOCUS puede usarlo.
+Las inteligencias no se llaman entre sí: se mandan **mensajes a través de GAIA**.
+
+```python
+gaia.pedir("hefesto", "apollo", "definir", concepto="pingüino")
+# → {"tipo": "respuesta", "estado": "ok", "datos": {...}, "responde_a": "a3f9..."}
+```
+
+- Cada mensaje se puede convertir a JSON, así que el mismo formato servirá por WiFi o para darle órdenes a la mini IA de un robot. Las órdenes pueden llevar `objetivo`, `restricciones` y `si_falla` (plan B).
+- Si una inteligencia falla, GAIA no se cae: responde `error` y publica el evento `fallo` (la semilla de HADES).
+- GAIA guarda un historial de todos los mensajes (la semilla de TABRIS).
+- Agregar una inteligencia nueva es crear una clase con sus acciones y registrarla; no hay que tocar a las demás.
+
+APOLLO no sabe que HEFESTO existe, así que cualquier otra inteligencia de FOCUS puede usarlo.
 
 ## Cómo usarlo
 
@@ -63,7 +95,7 @@ pip install -r requirements.txt
 python HEFESTO.py
 ```
 
-Escribe `ayuda` para ver todos los comandos.
+Escribe `ayuda` para ver todos los comandos, o `ecosistema` para ver qué inteligencias están conectadas a GAIA.
 
 ## Pruebas
 
@@ -71,6 +103,29 @@ Escribe `ayuda` para ver todos los comandos.
 python -m pytest
 ```
 
-135 pruebas cubren el lenguaje, el conocimiento, el razonamiento, las contradicciones, el olvido y el contexto. Cada prueba usa un diccionario temporal, así que nunca toca el conocimiento real de HEFESTO.
+353 pruebas cubren el lenguaje, el conocimiento, el razonamiento, las contradicciones, el olvido y el contexto, la base de datos, la redacción, la importación, la calculadora y la coordinación entre inteligencias con GAIA. Cada prueba usa un diccionario temporal, así que nunca toca el conocimiento real de HEFESTO.
+
+## Hoja de ruta
+
+FOCUS crece por niveles:
+
+1. **IA individual** ✅ procesar instrucciones, aprender, recordar y resolver problemas sencillos.
+2. **IA especializada**: TABRIS (supervisión y registro de eventos) y MINERVA (planificación).
+3. **Ecosistema multiagente**: GAIA coordina a las inteligencias; ÉTER percibe el entorno con sensores reales (ESP32).
+4. **Ecosistema autónomo supervisado**: planes de varios pasos, herramientas, administración de recursos y control de dispositivos, con límites de seguridad.
+5. **Ecosistema cognitivo integrado**: la meta ambiciosa.
 
 Próximos pasos para entrenar mejor a HEFESTO: leer documentos, migrar a una base de datos real, importar conocimiento público (Wikidata, ConceptNet), llevar la red neuronal a PyTorch y explorar embeddings y un mini transformer.
+
+## Diccionario: WordNet en español
+
+Para darle a HEFESTO miles de palabras ya conectadas:
+
+```
+pip install wn
+python -m herramientas.importar_wordnet
+```
+
+Elige el significado más común de cada palabra usando la frecuencia de uso del WordNet en inglés (para que "rueda" sea *wheel* y no un instrumento de tortura), prefiere palabras de México ("computadora" sobre "ordenador") y respalda la base de datos antes de importar.
+
+Créditos: [Multilingual Central Repository](https://adimen.si.ehu.es/web/MCR/) (WordNet en español, licencia [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)) a través del [Open Multilingual Wordnet](https://omwn.org/), y [Princeton WordNet 3.0](https://wordnet.princeton.edu/) ([licencia](https://wordnet.princeton.edu/license-and-commercial-use)).
