@@ -43,6 +43,13 @@ class Inteligencia:
             "acciones": sorted(self.acciones),
         }
 
+    def al_conectarse(self):
+        """
+        GAIA la llama justo después de registrarla. Sirve para preparar
+        lo que necesite ya conectada, como suscribirse a eventos.
+        Por defecto no hace nada.
+        """
+
     def sabe(self, accion):
         return accion in self.acciones
 

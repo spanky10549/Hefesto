@@ -49,6 +49,9 @@ Cerebro/
 │   ├── mensajes.py         Órdenes, respuestas y eventos (listos para JSON)
 │   ├── inteligencia.py     El molde que comparten todas las inteligencias
 │   └── nucleo.py           Directorio, entrega, fallos, eventos e historial
+├── tabris/                 TABRIS: supervisa y registra todo lo que pasa
+│   ├── registro.py         Guarda cada mensaje en un archivo .jsonl
+│   └── servicio.py         Resumen, búsqueda y detección de fallos repetidos
 ├── apollo/                 APOLLO: gestión del conocimiento
 │   ├── conocimiento.py     Conceptos, relaciones, sinónimos, caminos, olvido
 │   ├── lenguaje.py         Normalización, verbos y distancia de edición
@@ -81,7 +84,7 @@ gaia.pedir("hefesto", "apollo", "definir", concepto="pingüino")
 
 - Cada mensaje se puede convertir a JSON, así que el mismo formato servirá por WiFi o para darle órdenes a la mini IA de un robot. Las órdenes pueden llevar `objetivo`, `restricciones` y `si_falla` (plan B).
 - Si una inteligencia falla, GAIA no se cae: responde `error` y publica el evento `fallo` (la semilla de HADES).
-- GAIA guarda un historial de todos los mensajes (la semilla de TABRIS).
+- **TABRIS** observa cada mensaje y lo guarda en `tabris_registro.jsonl`, así que sobrevive aunque se apague HEFESTO. Responde "¿qué pasó hoy?" y, si una inteligencia falla tres veces seguidas, publica el evento `anomalia`. Como dice el plan de FOCUS, no repara nada: identifica, documenta y avisa.
 - Agregar una inteligencia nueva es crear una clase con sus acciones y registrarla; no hay que tocar a las demás.
 
 APOLLO no sabe que HEFESTO existe, así que cualquier otra inteligencia de FOCUS puede usarlo.
@@ -103,7 +106,7 @@ Escribe `ayuda` para ver todos los comandos, o `ecosistema` para ver qué inteli
 python -m pytest
 ```
 
-353 pruebas cubren el lenguaje, el conocimiento, el razonamiento, las contradicciones, el olvido y el contexto, la base de datos, la redacción, la importación, la calculadora y la coordinación entre inteligencias con GAIA. Cada prueba usa un diccionario temporal, así que nunca toca el conocimiento real de HEFESTO.
+379 pruebas cubren el lenguaje, el conocimiento, el razonamiento, las contradicciones, el olvido y el contexto, la base de datos, la redacción, la importación, la calculadora, la coordinación entre inteligencias con GAIA y la supervisión de TABRIS. Cada prueba usa un diccionario temporal, así que nunca toca el conocimiento real de HEFESTO.
 
 ## Hoja de ruta
 

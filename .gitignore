@@ -9,3 +9,5 @@ __pycache__/
 
 # Estado de la conversación (cambia en cada plática)
 conversacion.json
+
+tabris_registro.jsonl

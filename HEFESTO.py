@@ -42,6 +42,7 @@ from apollo.lenguaje import (
 
 from apollo.lector import leer_archivo, guardar_hechos
 from calculo.aritmetica import extraer_operacion
+from apollo.lenguaje import quitar_acentos, quitar_signos
 from gaia import crear_ecosistema, OK, RECHAZADO
 from conversacion.redaccion import redactar_definicion
 from apollo.lenguaje import forma_singular
@@ -68,7 +69,17 @@ from apollo.razonamiento import (
 
 # GAIA conecta a HEFESTO con las demás inteligencias. HEFESTO ya no
 # llama directo a APOLLO ni a la calculadora: les manda mensajes.
-ecosistema = crear_ecosistema()
+#
+# Se crea hasta que se necesita (no al importar este archivo), para que
+# las pruebas no escriban el registro de TABRIS en la carpeta real.
+_ecosistema = None
+
+
+def ecosistema():
+    global _ecosistema
+    if _ecosistema is None:
+        _ecosistema = crear_ecosistema()
+    return _ecosistema
 
 
 def pedir(para, accion, **datos):
@@ -77,7 +88,7 @@ def pedir(para, accion, **datos):
     Devuelve los datos si salió bien; si no, explica qué pasó y
     devuelve None.
     """
-    respuesta = ecosistema.pedir("hefesto", para, accion, **datos)
+    respuesta = ecosistema().pedir("hefesto", para, accion, **datos)
 
     if respuesta["estado"] == OK:
         return respuesta["datos"]
@@ -96,9 +107,57 @@ def pedir(para, accion, **datos):
 def mostrar_ecosistema():
     """Quién está conectado a GAIA y qué sabe hacer."""
     print("HEFESTO: Inteligencias conectadas a GAIA:")
-    for nombre, ficha in ecosistema.directorio().items():
+    for nombre, ficha in ecosistema().directorio().items():
         print(f"  {nombre.upper()}: {ficha['descripcion']}")
         print(f"    sabe: {', '.join(ficha['acciones'])}")
+
+
+def comando_simple(comando):
+    """'¿Qué pasó hoy?' → 'que paso hoy', para comparar comandos fijos."""
+    return " ".join(quitar_acentos(quitar_signos(comando.lower())).split())
+
+
+def contar(cantidad, singular, plural):
+    """contar(1, 'orden', 'órdenes') → '1 orden'; con 3 → '3 órdenes'."""
+    return f"{cantidad} {singular if cantidad == 1 else plural}"
+
+
+def mostrar_registro():
+    """Lo que TABRIS vio pasar hoy."""
+    r = pedir("tabris", "resumen", dia="hoy")
+    if r is None:
+        return
+
+    print(
+        f"HEFESTO: Según TABRIS, hoy pasaron {contar(r['mensajes'], 'mensaje', 'mensajes')}: "
+        f"{contar(r['ordenes'], 'orden', 'órdenes')}, "
+        f"{contar(r['rechazos'], 'rechazo', 'rechazos')} y "
+        f"{contar(r['errores'], 'error', 'errores')}."
+    )
+
+    for nombre, cuantas in sorted(r["por_inteligencia"].items()):
+        print(f"  {nombre.upper()}: {contar(cuantas, 'orden', 'órdenes')}")
+
+    if r["ultimo_error"]:
+        e = r["ultimo_error"]
+        print(f"  Último error: {e['inteligencia'].upper()} al hacer '{e['accion']}' ({e['detalle']})")
+
+
+def mostrar_errores():
+    """Los últimos errores que registró TABRIS."""
+    r = pedir("tabris", "buscar", estado="error", cantidad=5)
+    if r is None:
+        return
+
+    if not r["mensajes"]:
+        print("HEFESTO: TABRIS no tiene errores registrados.")
+        return
+
+    print("HEFESTO: Últimos errores que registró TABRIS:")
+    for m in r["mensajes"]:
+        hora = m["fecha"].replace("T", " ")
+        print(f"  {hora}  {m['de'].upper()} → {m['accion']}: {m['detalle']}")
+
 
 # ==========================================
 # FUNCIÓN DE ACTIVACIÓN
@@ -1372,6 +1431,8 @@ HEFESTO: Esto es lo que sé hacer:
   SISTEMA
     ordena tu diccionario   une repetidos y pasa conceptos a singular
     ecosistema              quién está conectado a GAIA y qué sabe hacer
+    qué pasó hoy            resumen de TABRIS: órdenes, rechazos y errores
+    errores                 los últimos errores que registró TABRIS
     estado, quién eres, ayuda, salir
 
   Relaciones que entiendo:
@@ -1587,9 +1648,17 @@ def iniciar_hefesto():
         # ECOSISTEMA
         # ======================================
 
-        elif comando_normalizado in ("ecosistema", "quien esta conectado"):
+        elif comando_simple(comando) in ("ecosistema", "quien esta conectado"):
 
             mostrar_ecosistema()
+
+        elif comando_simple(comando) in ("registro", "que paso hoy"):
+
+            mostrar_registro()
+
+        elif comando_simple(comando) in ("errores", "errores recientes"):
+
+            mostrar_errores()
 
         # ======================================
         # PROBAR XOR

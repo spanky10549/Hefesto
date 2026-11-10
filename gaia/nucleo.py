@@ -40,6 +40,7 @@ class Gaia:
     def __init__(self, max_historial=MAX_HISTORIAL):
         self.inteligencias = {}
         self.suscripciones = {}          # {nombre del evento: [funciones]}
+        self.observadores = []           # ven TODOS los mensajes (TABRIS)
         self.historial = deque(maxlen=max_historial)
 
     # ==========================================
@@ -57,6 +58,7 @@ class Gaia:
 
         inteligencia.gaia = self
         self.inteligencias[nombre] = inteligencia
+        inteligencia.al_conectarse()
 
         self.publicar(crear_evento(self.nombre, "registro", inteligencia.presentarse()))
 
@@ -185,8 +187,22 @@ class Gaia:
     # HISTORIAL (semilla de TABRIS)
     # ==========================================
 
+    def observar(self, funcion):
+        """
+        Llama a 'funcion(mensaje)' con CADA mensaje que pase por GAIA:
+        órdenes, respuestas y eventos. Es para quien supervisa (TABRIS).
+        """
+        self.observadores.append(funcion)
+
     def _anotar(self, mensaje):
         self.historial.append(mensaje)
+
+        for funcion in self.observadores:
+            try:
+                funcion(mensaje)
+            except Exception:
+                # Si el que supervisa falla, el ecosistema sigue funcionando.
+                pass
 
     def ultimos(self, cantidad=10, tipo=None):
         """Los últimos mensajes, opcionalmente de un tipo."""

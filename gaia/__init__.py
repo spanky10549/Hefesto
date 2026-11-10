@@ -16,8 +16,12 @@ def crear_ecosistema():
     # Se importan aquí para que GAIA no dependa de ellas al cargarse.
     from apollo.servicio import Apollo
     from calculo.servicio import Calculadora
+    from tabris import Tabris
 
     gaia = Gaia()
+
+    # TABRIS va primero para que vea llegar a todas las demás.
+    gaia.registrar(Tabris())
     gaia.registrar(Apollo())
     gaia.registrar(Calculadora())
     return gaia
