@@ -182,6 +182,38 @@ def recuperar_inteligencia(nombre):
         print(f"HEFESTO: HADES no pudo recuperar a {nombre.upper()}; sigue aislada.")
 
 
+def tamano(cantidad_bytes):
+    """17066827776 → '15.9 GB'"""
+    for unidad in ("bytes", "KB", "MB", "GB"):
+        if cantidad_bytes < 1024:
+            return f"{cantidad_bytes:.1f} {unidad}" if unidad != "bytes" else f"{cantidad_bytes} bytes"
+        cantidad_bytes /= 1024
+    return f"{cantidad_bytes:.1f} TB"
+
+
+def mostrar_recursos():
+    """Lo que ARTEMIS ve de la computadora."""
+    r = pedir("artemis", "estado")
+    if r is None:
+        return
+
+    cpu, ram, disco, bateria = r["cpu"], r["ram"], r["disco"], r["bateria"]
+
+    print("HEFESTO: Esto ve ARTEMIS en la computadora:")
+    print(f"  CPU:     {cpu['porcentaje']:.0f} % en uso ({contar(cpu['nucleos'], 'núcleo', 'núcleos')})")
+    print(f"  RAM:     {ram['porcentaje']:.0f} % en uso; libres {tamano(ram['disponible'])} de {tamano(ram['total'])}")
+    print(f"  Disco:   {disco['porcentaje']:.0f} % en uso; libres {tamano(disco['libre'])} de {tamano(disco['total'])}")
+
+    if bateria is None:
+        print("  Batería: no tiene (computadora de escritorio o Raspberry Pi)")
+    else:
+        enchufe = "conectada" if bateria["conectada"] else "sin conectar"
+        print(f"  Batería: {bateria['porcentaje']} % ({enchufe})")
+
+    for alerta in r["alertas"]:
+        print(f"  ⚠ Ojo: {alerta['texto']}.")
+
+
 def mostrar_errores():
     """Los últimos errores que registró TABRIS."""
     r = pedir("tabris", "buscar", estado="error", cantidad=5)
@@ -1473,6 +1505,7 @@ HEFESTO: Esto es lo que sé hacer:
     qué pasó hoy            resumen de TABRIS: órdenes, rechazos y errores
     errores                 los últimos errores que registró TABRIS
     incidentes              los problemas que HADES está atendiendo
+    recursos                CPU, RAM, disco y batería según ARTEMIS
     recupera <inteligencia> HADES intenta reiniciarla y liberarla
     estado, quién eres, ayuda, salir
 
@@ -1700,6 +1733,10 @@ def iniciar_hefesto():
         elif comando_simple(comando) in ("errores", "errores recientes"):
 
             mostrar_errores()
+
+        elif comando_simple(comando) in ("recursos", "como esta la compu"):
+
+            mostrar_recursos()
 
         elif comando_simple(comando) in ("incidentes", "hay problemas"):
 

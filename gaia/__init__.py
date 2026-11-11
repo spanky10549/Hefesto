@@ -18,6 +18,7 @@ def crear_ecosistema():
     from calculo.servicio import Calculadora
     from tabris import Tabris
     from hades import Hades
+    from artemis import Artemis
 
     gaia = Gaia()
 
@@ -27,4 +28,5 @@ def crear_ecosistema():
     gaia.registrar(Hades())
     gaia.registrar(Apollo())
     gaia.registrar(Calculadora())
+    gaia.registrar(Artemis())
     return gaia
