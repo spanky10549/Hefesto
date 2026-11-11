@@ -17,11 +17,14 @@ def crear_ecosistema():
     from apollo.servicio import Apollo
     from calculo.servicio import Calculadora
     from tabris import Tabris
+    from hades import Hades
 
     gaia = Gaia()
 
-    # TABRIS va primero para que vea llegar a todas las demás.
+    # TABRIS va primero para que vea llegar a todas las demás,
+    # y HADES después para atender cualquier fallo desde el inicio.
     gaia.registrar(Tabris())
+    gaia.registrar(Hades())
     gaia.registrar(Apollo())
     gaia.registrar(Calculadora())
     return gaia

@@ -41,6 +41,7 @@ class Gaia:
         self.inteligencias = {}
         self.suscripciones = {}          # {nombre del evento: [funciones]}
         self.observadores = []           # ven TODOS los mensajes (TABRIS)
+        self.aisladas = set()            # en cuarentena: no reciben órdenes (HADES)
         self.historial = deque(maxlen=max_historial)
 
     # ==========================================
@@ -65,6 +66,7 @@ class Gaia:
     def retirar(self, nombre):
         """Desconecta una inteligencia (por ejemplo, un robot que se apagó)."""
         inteligencia = self.inteligencias.pop(nombre, None)
+        self.aisladas.discard(nombre)
         if inteligencia is not None:
             inteligencia.gaia = None
             self.publicar(crear_evento(self.nombre, "retiro", {"nombre": nombre}))
@@ -72,7 +74,7 @@ class Gaia:
     def directorio(self):
         """Quién está conectado y qué sabe hacer cada quien."""
         return {
-            nombre: inteligencia.presentarse()
+            nombre: {**inteligencia.presentarse(), "aislada": nombre in self.aisladas}
             for nombre, inteligencia in sorted(self.inteligencias.items())
         }
 
@@ -112,6 +114,12 @@ class Gaia:
             respuesta = crear_respuesta(
                 orden, DESCONOCIDO,
                 detalle=f"{orden['para']} no sabe hacer '{orden['accion']}'"
+            )
+
+        elif orden["para"] in self.aisladas:
+            respuesta = crear_respuesta(
+                orden, RECHAZADO,
+                detalle=f"{orden['para']} está aislada por fallas; pídele a HADES que la recupere"
             )
 
         else:
@@ -154,6 +162,52 @@ class Gaia:
             }))
 
             return crear_respuesta(orden, ERROR, detalle=detalle)
+
+    # ==========================================
+    # CUARENTENA (la usa HADES)
+    # ==========================================
+
+    # Quien atiende los fallos nunca se aísla: si no, nadie podría recuperar nada.
+    NO_SE_AISLAN = ("hades",)
+
+    def aislar(self, nombre, motivo=None):
+        """Deja de entregarle órdenes a una inteligencia hasta que la liberen."""
+        if nombre not in self.inteligencias:
+            raise ValueError(f"no conozco a '{nombre}'")
+        if nombre in self.NO_SE_AISLAN:
+            raise ValueError(f"'{nombre}' no se puede aislar")
+        if nombre in self.aisladas:
+            return
+
+        self.aisladas.add(nombre)
+        self.publicar(crear_evento(self.nombre, "aislamiento", {
+            "inteligencia": nombre, "motivo": motivo
+        }))
+
+    def liberar(self, nombre):
+        """Vuelve a entregarle órdenes."""
+        if nombre not in self.aisladas:
+            return
+
+        self.aisladas.discard(nombre)
+        self.publicar(crear_evento(self.nombre, "liberacion", {"inteligencia": nombre}))
+
+    def esta_aislada(self, nombre):
+        return nombre in self.aisladas
+
+    def reiniciar(self, nombre):
+        """
+        Le pide a una inteligencia que se reinicie. Devuelve True si pudo
+        y False si volvió a fallar o no existe. Nunca lanza excepciones.
+        """
+        inteligencia = self.inteligencias.get(nombre)
+        if inteligencia is None:
+            return False
+
+        try:
+            return inteligencia.reiniciar() is not False
+        except Exception:
+            return False
 
     # ==========================================
     # EVENTOS

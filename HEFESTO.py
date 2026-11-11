@@ -108,7 +108,8 @@ def mostrar_ecosistema():
     """Quién está conectado a GAIA y qué sabe hacer."""
     print("HEFESTO: Inteligencias conectadas a GAIA:")
     for nombre, ficha in ecosistema().directorio().items():
-        print(f"  {nombre.upper()}: {ficha['descripcion']}")
+        aislada = "  [AISLADA]" if ficha["aislada"] else ""
+        print(f"  {nombre.upper()}{aislada}: {ficha['descripcion']}")
         print(f"    sabe: {', '.join(ficha['acciones'])}")
 
 
@@ -141,6 +142,44 @@ def mostrar_registro():
     if r["ultimo_error"]:
         e = r["ultimo_error"]
         print(f"  Último error: {e['inteligencia'].upper()} al hacer '{e['accion']}' ({e['detalle']})")
+
+
+def mostrar_incidentes():
+    """Los incidentes que HADES tiene abiertos."""
+    r = pedir("hades", "incidentes", abiertos=True)
+    if r is None:
+        return
+
+    if not r["incidentes"]:
+        print("HEFESTO: HADES no tiene incidentes abiertos. Todo en orden.")
+        return
+
+    print("HEFESTO: Incidentes abiertos según HADES:")
+    for i in r["incidentes"]:
+        estado = "AISLADA" if i["estado"] == "aislado" else "abierto"
+        print(
+            f"  #{i['numero']} {i['inteligencia'].upper()} ({estado}): "
+            f"{contar(i['fallos'], 'fallo', 'fallos')}, el último: {i['ultimo_detalle']}"
+        )
+        if i["estado"] == "aislado":
+            print(f"     Para intentar recuperarla: recupera {i['inteligencia']}")
+
+
+def recuperar_inteligencia(nombre):
+    """Le pide a HADES que reinicie y libere a una inteligencia."""
+    r = pedir("hades", "recuperar", inteligencia=nombre)
+    if r is None:
+        return
+
+    if r["recuperada"] and not r["estaba_aislada"] and not r["incidentes_cerrados"]:
+        print(f"HEFESTO: {nombre.upper()} estaba bien; no había nada que recuperar.")
+    elif r["recuperada"]:
+        print(
+            f"HEFESTO: HADES recuperó a {nombre.upper()} y cerró "
+            f"{contar(r['incidentes_cerrados'], 'incidente', 'incidentes')}."
+        )
+    else:
+        print(f"HEFESTO: HADES no pudo recuperar a {nombre.upper()}; sigue aislada.")
 
 
 def mostrar_errores():
@@ -1433,6 +1472,8 @@ HEFESTO: Esto es lo que sé hacer:
     ecosistema              quién está conectado a GAIA y qué sabe hacer
     qué pasó hoy            resumen de TABRIS: órdenes, rechazos y errores
     errores                 los últimos errores que registró TABRIS
+    incidentes              los problemas que HADES está atendiendo
+    recupera <inteligencia> HADES intenta reiniciarla y liberarla
     estado, quién eres, ayuda, salir
 
   Relaciones que entiendo:
@@ -1659,6 +1700,14 @@ def iniciar_hefesto():
         elif comando_simple(comando) in ("errores", "errores recientes"):
 
             mostrar_errores()
+
+        elif comando_simple(comando) in ("incidentes", "hay problemas"):
+
+            mostrar_incidentes()
+
+        elif comando_simple(comando).startswith("recupera "):
+
+            recuperar_inteligencia(comando_simple(comando).split(" ", 1)[1].strip())
 
         # ======================================
         # PROBAR XOR

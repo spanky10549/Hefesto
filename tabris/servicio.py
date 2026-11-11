@@ -21,7 +21,7 @@ Acciones:
 from datetime import date
 
 from gaia.inteligencia import Inteligencia
-from gaia.mensajes import RESPUESTA, ORDEN, ERROR, RECHAZADO, crear_evento
+from gaia.mensajes import RESPUESTA, ORDEN, EVENTO, ERROR, RECHAZADO, crear_evento
 
 from tabris.registro import Registro
 
@@ -63,6 +63,10 @@ class Tabris(Inteligencia):
 
         if mensaje["tipo"] == RESPUESTA:
             self._revisar_respuesta(mensaje)
+
+        # Si la liberaron, empieza de cero: que pueda volver a avisar.
+        elif mensaje["tipo"] == EVENTO and mensaje["accion"] == "liberacion":
+            self.errores_seguidos[mensaje["datos"]["inteligencia"]] = 0
 
     def _revisar_respuesta(self, respuesta):
         """Cuenta errores seguidos; al llegar al límite, avisa una vez."""

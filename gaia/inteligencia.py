@@ -50,6 +50,15 @@ class Inteligencia:
         Por defecto no hace nada.
         """
 
+    def reiniciar(self):
+        """
+        HADES la usa para intentar recuperarla después de varias fallas:
+        aquí se limpia lo que pudo quedar mal (una conexión, un archivo
+        abierto, datos a medias). Devuelve False si no pudo recuperarse.
+        Por defecto no hay nada que limpiar, así que funciona.
+        """
+        return True
+
     def sabe(self, accion):
         return accion in self.acciones
 

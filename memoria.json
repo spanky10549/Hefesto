@@ -90,6 +90,19 @@
             "tipo": "sin_categoria",
             "temas": [],
             "contenido": "prueba_guardado"
+        },
+        {
+            "tipo": "inteligencia_artificial",
+            "temas": [
+                "carácter",
+                "unidad lineal",
+                "unidad de medida",
+                "sílaba",
+                "cuantía",
+                "enredadera",
+                "Inteligencia Artificial"
+            ],
+            "contenido": "que jensen huang destruyo nvidia por ponerla"
         }
     ]
 }
