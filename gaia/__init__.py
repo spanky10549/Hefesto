@@ -19,6 +19,8 @@ def crear_ecosistema():
     from tabris import Tabris
     from hades import Hades
     from artemis import Artemis
+    from minerva import Minerva
+    from poseidon import Poseidon
 
     gaia = Gaia()
 
@@ -26,7 +28,9 @@ def crear_ecosistema():
     # y HADES después para atender cualquier fallo desde el inicio.
     gaia.registrar(Tabris())
     gaia.registrar(Hades())
+    gaia.registrar(Poseidon())
     gaia.registrar(Apollo())
     gaia.registrar(Calculadora())
     gaia.registrar(Artemis())
+    gaia.registrar(Minerva())
     return gaia

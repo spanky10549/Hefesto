@@ -112,11 +112,11 @@ python -m pytest
 
 FOCUS crece por niveles:
 
-1. **IA individual** ✅ procesar instrucciones, aprender, recordar y resolver problemas sencillos.
-2. **IA especializada**: TABRIS (supervisión y registro de eventos) y MINERVA (planificación).
-3. **Ecosistema multiagente**: GAIA coordina a las inteligencias; ÉTER percibe el entorno con sensores reales (ESP32).
-4. **Ecosistema autónomo supervisado**: planes de varios pasos, herramientas, administración de recursos y control de dispositivos, con límites de seguridad.
-5. **Ecosistema cognitivo integrado**: la meta ambiciosa.
+IA individual: procesar instrucciones, aprender, recordar y resolver problemas sencillos.
+IA especializada: TABRIS (supervisión y registro de eventos) y MINERVA (planificación).
+Ecosistema multiagente: GAIA coordina a las inteligencias; ÉTER percibe el entorno con sensores reales (ESP32).
+Ecosistema autónomo supervisado: planes de varios pasos, herramientas, administración de recursos y control de dispositivos, con límites de seguridad.
+Ecosistema cognitivo integrado: la meta ambiciosa.
 
 Próximos pasos para entrenar mejor a HEFESTO: leer documentos, migrar a una base de datos real, importar conocimiento público (Wikidata, ConceptNet), llevar la red neuronal a PyTorch y explorar embeddings y un mini transformer.
 
@@ -124,10 +124,8 @@ Próximos pasos para entrenar mejor a HEFESTO: leer documentos, migrar a una bas
 
 Para darle a HEFESTO miles de palabras ya conectadas:
 
-```
 pip install wn
 python -m herramientas.importar_wordnet
-```
 
 Elige el significado más común de cada palabra usando la frecuencia de uso del WordNet en inglés (para que "rueda" sea *wheel* y no un instrumento de tortura), prefiere palabras de México ("computadora" sobre "ordenador") y respalda la base de datos antes de importar.
 

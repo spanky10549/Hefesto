@@ -44,6 +44,12 @@ from apollo.lector import leer_archivo, guardar_hechos
 from calculo.aritmetica import extraer_operacion
 from apollo.lenguaje import quitar_acentos, quitar_signos
 from gaia import crear_ecosistema, OK, RECHAZADO
+from gaia.tareas import ejecutar_plan, OMITIDO, PENDIENTE
+from gaia.mensajes import crear_orden
+from gaia.red import InteligenciaRemota
+from poseidon import Guardia, cargar_clave
+import rover
+from conversacion.resultados import resumir
 from conversacion.redaccion import redactar_definicion
 from apollo.lenguaje import forma_singular
 
@@ -88,7 +94,12 @@ def pedir(para, accion, **datos):
     Devuelve los datos si salió bien; si no, explica qué pasó y
     devuelve None.
     """
-    respuesta = ecosistema().pedir("hefesto", para, accion, **datos)
+    return revisar_respuesta(ecosistema().pedir("hefesto", para, accion, **datos))
+
+
+def revisar_respuesta(respuesta):
+    """Devuelve los datos si salió bien; si no, explica qué pasó y devuelve None."""
+    para, accion = respuesta["de"], respuesta["accion"]
 
     if respuesta["estado"] == OK:
         return respuesta["datos"]
@@ -212,6 +223,166 @@ def mostrar_recursos():
 
     for alerta in r["alertas"]:
         print(f"  ⚠ Ojo: {alerta['texto']}.")
+
+
+def mostrar_plan(plan):
+    """Los pasos que propuso MINERVA, con sus avisos."""
+    print(f"HEFESTO: MINERVA lo dividió en {contar(len(plan['pasos']), 'paso', 'pasos')}:")
+
+    for paso in plan["pasos"]:
+        linea = f"  {paso['numero']}. {paso['descripcion']}  → {paso['para'].upper()}"
+        if paso["aviso"]:
+            linea += f"  ⚠ {paso['aviso']}"
+        print(linea)
+
+    for parte in plan["no_entendidos"]:
+        print(f"  ?  No entendí: \"{parte}\"")
+
+    recursos = plan["recursos"]
+    if recursos["alcanza"] is False:
+        print(f"  ⚠ ARTEMIS dice que no alcanza la RAM (faltan {recursos['faltan'].get('ram_mb', '?')} MB).")
+    elif recursos["alcanza"] is None:
+        print("  (No pude preguntarle a ARTEMIS por los recursos.)")
+
+
+def planear_tarea(tarea):
+    """Solo muestra el plan, sin ejecutarlo."""
+    plan = pedir("minerva", "planear", tarea=tarea)
+    if plan is not None:
+        mostrar_plan(plan)
+        if plan["viable"]:
+            print("  El plan se puede hacer. Si quieres que lo haga: encárgate de <tarea>")
+
+
+def mostrar_paso(resultado):
+    """Se llama al terminar cada paso, para ir mostrando el avance."""
+    numero = resultado["numero"]
+    quien = resultado["para"].upper()
+
+    if resultado["estado"] == OK:
+        texto = resumir(resultado["para"], resultado["accion"], resultado["datos"])
+        print(f"  {numero}. [{quien}] {texto}")
+    elif resultado["estado"] == OMITIDO:
+        print(f"  {numero}. [{quien}] Lo salté: {resultado['detalle']}.")
+    elif resultado["estado"] == PENDIENTE:
+        print(f"  {numero}. [{quien}] No se hizo porque un paso anterior falló.")
+    else:
+        print(f"  {numero}. [{quien}] No se pudo: {resultado['detalle']}")
+
+
+def encargarse_de(tarea):
+    """MINERVA planea, GAIA reparte y HEFESTO junta los resultados."""
+    plan = pedir("minerva", "planear", tarea=tarea)
+    if plan is None:
+        return
+
+    mostrar_plan(plan)
+
+    if plan["recursos"]["alcanza"] is False:
+        print("HEFESTO: No lo voy a hacer: no alcanzan los recursos.")
+        return
+
+    print("HEFESTO: Manos a la obra:")
+    resultado = ejecutar_plan(ecosistema(), plan, al_terminar_paso=mostrar_paso)
+
+    bien = sum(1 for r in resultado["resultados"] if r["estado"] == OK)
+    total = len(resultado["resultados"])
+
+    if resultado["completada"]:
+        print(f"HEFESTO: Listo, terminé {contar(total, 'paso', 'pasos')}.")
+    else:
+        print(f"HEFESTO: Terminé {bien} de {contar(total, 'paso', 'pasos')}.")
+
+
+# ==========================================
+# ROVER (por la red, protegido por POSEIDON)
+# ==========================================
+
+def conectar_rover():
+    """Busca al rover en la red y lo registra en GAIA."""
+    remoto = InteligenciaRemota("rover_1", rover.HOST, rover.PUERTO, Guardia(cargar_clave()))
+
+    if not remoto.conectar():
+        print(
+            "HEFESTO: No encontré al rover. ¿Ya lo encendiste? En otra terminal: "
+            "python -m rover.servidor"
+        )
+        return
+
+    gaia = ecosistema()
+    if remoto.nombre in gaia.inteligencias:
+        gaia.retirar(remoto.nombre)   # reconectar: se cambia el representante viejo
+    gaia.registrar(remoto)
+
+    print(f"HEFESTO: Conectado con {remoto.nombre.upper()} en {rover.HOST}:{rover.PUERTO}.")
+    print(f"  Sabe: {', '.join(sorted(remoto.acciones))}")
+
+
+def rover_conectado():
+    if "rover_1" in ecosistema().inteligencias:
+        return True
+    print("HEFESTO: El rover no está conectado. Escribe: conecta el rover")
+    return False
+
+
+def mandar_rover(x, y):
+    """Le da al rover un objetivo; él decide cómo llegar."""
+    if not rover_conectado():
+        return
+
+    orden = crear_orden(
+        "hefesto", "rover_1", "ir_a", {"x": x, "y": y},
+        objetivo=f"llegar a ({x}, {y})",
+        restricciones={"bateria_minima": 10},
+        si_falla="buscar otra ruta",
+    )
+    r = revisar_respuesta(ecosistema().enviar(orden))
+    if r is None:
+        return
+
+    for decision in r["decisiones"]:
+        print(f"  ROVER: {decision}")
+
+    posicion = f"({r['posicion'][0]}, {r['posicion'][1]})"
+    if r["llego"]:
+        print(
+            f"HEFESTO: El rover llegó a {posicion} en {contar(r['casillas'], 'casilla', 'casillas')}. "
+            f"Batería: {r['bateria']} %."
+        )
+    else:
+        print(f"HEFESTO: El rover no llegó; se quedó en {posicion}. Batería: {r['bateria']} %.")
+        if r["motivo"] == "bateria":
+            print("  Para recargarlo: rover recarga")
+
+
+def mostrar_rover():
+    if not rover_conectado():
+        return
+    r = pedir("rover_1", "estado")
+    if r is None:
+        return
+    x, y = r["posicion"]
+    print(f"HEFESTO: El rover está en ({x}, {y}) con {r['bateria']} % de batería.")
+    if r["obstaculos_conocidos"]:
+        obstaculos = ", ".join(f"({a}, {b})" for a, b in r["obstaculos_conocidos"])
+        print(f"  Obstáculos que ya descubrió: {obstaculos}")
+
+
+def recargar_rover():
+    if rover_conectado() and pedir("rover_1", "recargar") is not None:
+        print("HEFESTO: Rover recargado al 100 %.")
+
+
+def mostrar_seguridad():
+    r = pedir("poseidon", "reporte")
+    if r is None:
+        return
+    if not r["sospechosos"]:
+        print("HEFESTO: POSEIDON no ha visto mensajes sospechosos.")
+        return
+    print(f"HEFESTO: POSEIDON detectó {contar(r['sospechosos'], 'mensaje sospechoso', 'mensajes sospechosos')}:")
+    for motivo, cuantos in r["por_motivo"].items():
+        print(f"  {motivo}: {cuantos}")
 
 
 def mostrar_errores():
@@ -1506,6 +1677,18 @@ HEFESTO: Esto es lo que sé hacer:
     errores                 los últimos errores que registró TABRIS
     incidentes              los problemas que HADES está atendiendo
     recursos                CPU, RAM, disco y batería según ARTEMIS
+
+  ROVER (otro programa: python -m rover.servidor)
+    conecta el rover        lo busca en la red y lo conecta a GAIA
+    rover ve a <x> <y>      le das un objetivo; él decide cómo llegar
+    rover estado            dónde está y qué obstáculos descubrió
+    rover recarga           batería al 100 %
+    seguridad               mensajes sospechosos que detectó POSEIDON
+
+  TAREAS (MINERVA planea, GAIA reparte, HEFESTO junta)
+    planea <tarea>          muestra los pasos sin hacerlos
+    encárgate de <tarea>    hace la tarea completa
+        encárgate de investigar qué es un ave, calcular 2^10 y revisar los recursos
     recupera <inteligencia> HADES intenta reiniciarla y liberarla
     estado, quién eres, ayuda, salir
 
@@ -1733,6 +1916,36 @@ def iniciar_hefesto():
         elif comando_simple(comando) in ("errores", "errores recientes"):
 
             mostrar_errores()
+
+        elif comando_simple(comando).startswith("planea "):
+
+            planear_tarea(comando.strip().split(" ", 1)[1])
+
+        elif comando_simple(comando).startswith(("encargate de ", "haz esto ")):
+
+            tarea = comando.strip().split(" ", 2)[2]
+            encargarse_de(tarea)
+
+        elif comando_simple(comando) in ("conecta el rover", "conecta rover", "conecta al rover"):
+
+            conectar_rover()
+
+        elif re.match(r"^rover (ve|ir|muevete|anda) a\s+(\d+)[\s,]+(\d+)$", comando_simple(comando)):
+
+            x, y = re.match(r"^rover \w+ a\s+(\d+)[\s,]+(\d+)$", comando_simple(comando)).groups()
+            mandar_rover(int(x), int(y))
+
+        elif comando_simple(comando) in ("rover estado", "donde esta el rover", "rover"):
+
+            mostrar_rover()
+
+        elif comando_simple(comando) in ("rover recarga", "recarga el rover"):
+
+            recargar_rover()
+
+        elif comando_simple(comando) in ("seguridad", "poseidon"):
+
+            mostrar_seguridad()
 
         elif comando_simple(comando) in ("recursos", "como esta la compu"):
 
