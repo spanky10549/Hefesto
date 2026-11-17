@@ -21,6 +21,8 @@ def crear_ecosistema():
     from artemis import Artemis
     from minerva import Minerva
     from poseidon import Poseidon
+    from eter import Eter
+    from dispositivos.local import DispositivoLocal
 
     gaia = Gaia()
 
@@ -33,4 +35,8 @@ def crear_ecosistema():
     gaia.registrar(Calculadora())
     gaia.registrar(Artemis())
     gaia.registrar(Minerva())
+    gaia.registrar(Eter())
+
+    # Los sensores reales de esta computadora (o de la Raspberry Pi)
+    gaia.registrar(DispositivoLocal())
     return gaia

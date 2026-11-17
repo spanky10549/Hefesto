@@ -48,7 +48,7 @@ from gaia.tareas import ejecutar_plan, OMITIDO, PENDIENTE
 from gaia.mensajes import crear_orden
 from gaia.red import InteligenciaRemota
 from poseidon import Guardia, cargar_clave
-import rover
+import rover.mundo   # también trae rover.HOST y rover.PUERTO
 from conversacion.resultados import resumir
 from conversacion.redaccion import redactar_definicion
 from apollo.lenguaje import forma_singular
@@ -85,7 +85,20 @@ def ecosistema():
     global _ecosistema
     if _ecosistema is None:
         _ecosistema = crear_ecosistema()
+        _ecosistema.suscribir("sensor_detectado", avisar_sensor_detectado)
+        _ecosistema.suscribir("sensor_perdido", avisar_sensor_perdido)
     return _ecosistema
+
+
+def avisar_sensor_detectado(evento):
+    s = evento["datos"]
+    print(f"HEFESTO: 📡 Detecté un sensor nuevo: {s['sensor']} ({s['descripcion']}).")
+    print(f"  Está desactivado hasta que lo autorices: autoriza {s['sensor']}")
+
+
+def avisar_sensor_perdido(evento):
+    s = evento["datos"]
+    print(f"HEFESTO: ⚠ Dejé de poder leer {s['sensor']}: {s['motivo']}.")
 
 
 def pedir(para, accion, **datos):
@@ -330,8 +343,12 @@ def mandar_rover(x, y):
     if not rover_conectado():
         return
 
+    # Lo que ya se sabe del mapa (ÉTER) viaja con la orden.
+    mapa = pedir("eter", "mapa") or {"obstaculos": []}
+    conocidos = [o["casilla"] for o in mapa["obstaculos"]]
+
     orden = crear_orden(
-        "hefesto", "rover_1", "ir_a", {"x": x, "y": y},
+        "hefesto", "rover_1", "ir_a", {"x": x, "y": y, "obstaculos_conocidos": conocidos},
         objetivo=f"llegar a ({x}, {y})",
         restricciones={"bateria_minima": 10},
         si_falla="buscar otra ruta",
@@ -342,6 +359,12 @@ def mandar_rover(x, y):
 
     for decision in r["decisiones"]:
         print(f"  ROVER: {decision}")
+
+    # Lo que descubrió se comparte con ÉTER, para la próxima (y para otros robots).
+    if r.get("descubiertos"):
+        guardado = pedir("eter", "reportar_obstaculos", obstaculos=r["descubiertos"], origen="rover_1")
+        if guardado and guardado["nuevos"]:
+            print(f"  ÉTER: guardé {contar(guardado['nuevos'], 'obstáculo nuevo', 'obstáculos nuevos')} en el mapa compartido.")
 
     posicion = f"({r['posicion'][0]}, {r['posicion'][1]})"
     if r["llego"]:
@@ -371,6 +394,143 @@ def mostrar_rover():
 def recargar_rover():
     if rover_conectado() and pedir("rover_1", "recargar") is not None:
         print("HEFESTO: Rover recargado al 100 %.")
+
+
+# ==========================================
+# ENTORNO (ÉTER)
+# ==========================================
+
+NOMBRES_DE_TIPO = {
+    "señal_wifi": "Señal del WiFi",
+    "ruido": "Ruido",
+    "temperatura": "Temperatura",
+    "humedad": "Humedad",
+    "luz": "Luz",
+    "distancia": "Distancia",
+    "movimiento": "Movimiento",
+}
+
+
+def mostrar_entorno():
+    """ÉTER pide lecturas a todos los dispositivos y explica qué significan."""
+    r = pedir("eter", "actualizar")
+    if r is None:
+        return
+
+    if not r["dispositivos"]:
+        print("HEFESTO: No hay dispositivos con sensores conectados.")
+        return
+
+    e = pedir("eter", "entorno")
+    if e is None:
+        return
+
+    if not e["sensores"]:
+        print("HEFESTO: No hay ningún sensor activo. Escribe 'sensores' para ver por qué.")
+        return
+
+    print(f"HEFESTO: Según ÉTER ({contar(len(r['dispositivos']), 'dispositivo', 'dispositivos')}):")
+    for s in e["sensores"]:
+        valor = f"{s['valor']} {s['unidad']}".strip()
+        sentido = f" ({s['etiqueta']})" if s["etiqueta"] else ""
+        nombre = NOMBRES_DE_TIPO.get(s["tipo"], s["tipo"].capitalize())
+        print(f"  {nombre} en {s['lugar']}: {valor}{sentido}")
+        for raro in s["raro"]:
+            print(f"     ⚠ {raro}")
+
+    for dispositivo in r["fallaron"]:
+        print(f"  ⚠ {dispositivo.upper()} no contestó.")
+
+
+def dibujar_mapa():
+    """El mapa compartido de ÉTER, dibujado en texto."""
+    m = pedir("eter", "mapa")
+    if m is None:
+        return
+
+    obstaculos = {tuple(o["casilla"]) for o in m["obstaculos"]}
+
+    posicion = None
+    if "rover_1" in ecosistema().inteligencias and not ecosistema().esta_aislada("rover_1"):
+        estado = ecosistema().pedir("hefesto", "rover_1", "estado")
+        if estado["estado"] == OK:
+            posicion = tuple(estado["datos"]["posicion"])
+
+    print(f"HEFESTO: Mapa compartido de ÉTER ({contar(len(obstaculos), 'obstáculo conocido', 'obstáculos conocidos')}):")
+    for y in range(rover.mundo.ALTO - 1, -1, -1):
+        fila = []
+        for x in range(rover.mundo.ANCHO):
+            if (x, y) == posicion:
+                fila.append("R")
+            elif (x, y) in obstaculos:
+                fila.append("#")
+            else:
+                fila.append("·")
+        print(f"  {y} " + " ".join(fila))
+    print("    " + " ".join(str(x) for x in range(rover.mundo.ANCHO)))
+    print("  R = rover   # = obstáculo   · = libre o sin explorar")
+
+
+ICONOS_ESTADO = {"activo": "✅", "desactivado": "❌", "pendiente": "⏳"}
+
+
+def mostrar_sensores():
+    """Los sensores reales de esta máquina y su estado."""
+    r = pedir("dispositivo_local", "detectar")
+    if r is None:
+        return
+
+    print("HEFESTO: Sensores reales de esta computadora:")
+    for s in r["sensores"]:
+        icono = ICONOS_ESTADO.get(s["estado"], "?")
+        print(f"  {icono} {s['sensor']}: {s['descripcion']}")
+        if s["estado"] == "desactivado":
+            print(f"       desactivado: {s['motivo']}")
+        elif s["estado"] == "pendiente":
+            print(f"       detectado, falta tu permiso: autoriza {s['sensor']}")
+
+
+def avisar_pendientes():
+    """Al arrancar: si hay sensores esperando permiso, decirlo."""
+    r = ecosistema().pedir("hefesto", "dispositivo_local", "sensores")
+    if r["estado"] != OK:
+        return
+    pendientes = [s["sensor"] for s in r["datos"]["sensores"] if s["estado"] == "pendiente"]
+    if pendientes:
+        print(f"📡 Hay {contar(len(pendientes), 'sensor', 'sensores')} esperando tu permiso: "
+              f"{', '.join(pendientes)}. Escribe 'sensores' para verlos.")
+
+
+def autorizar_sensor(sensor):
+    r = pedir("dispositivo_local", "autorizar", sensor=sensor)
+    if r is not None:
+        print(f"HEFESTO: {sensor} autorizado. ÉTER ya lo va a leer.")
+
+
+def desactivar_sensor(sensor):
+    r = pedir("dispositivo_local", "desactivar", sensor=sensor)
+    if r is not None:
+        print(f"HEFESTO: {sensor} desactivado. Para volver a usarlo: autoriza {sensor}")
+
+
+def conectar_estacion_simulada():
+    """Para pruebas: una estación de mentira con temperatura, humedad y luz."""
+    from dispositivos.estacion import EstacionSimulada
+    if "estacion_1" in ecosistema().inteligencias:
+        print("HEFESTO: La estación simulada ya estaba conectada.")
+        return
+    ecosistema().registrar(EstacionSimulada())
+    print("HEFESTO: Conecté la estación SIMULADA (temperatura, humedad y luz de mentira).")
+    print("  Para provocar una alerta: simula temp_cuarto 45")
+
+
+def simular_sensor(sensor, valor):
+    if "estacion_1" not in ecosistema().inteligencias:
+        print("HEFESTO: Primero conecta la estación simulada: conecta la estacion simulada")
+        return
+    r = pedir("estacion_1", "simular", sensor=sensor, valor=valor)
+    if r is not None:
+        print(f"HEFESTO: La próxima lectura de {sensor} será {valor}. Escribe 'entorno' para verla.")
 
 
 def mostrar_seguridad():
@@ -1685,6 +1845,15 @@ HEFESTO: Esto es lo que sé hacer:
     rover recarga           batería al 100 %
     seguridad               mensajes sospechosos que detectó POSEIDON
 
+  ENTORNO (ÉTER)
+    entorno                 lee los sensores y dice qué significan
+    sensores                los sensores reales de esta compu y su estado
+    autoriza <sensor>       activa un sensor detectado (autoriza ruido)
+    desactiva <sensor>      lo apaga aunque exista
+    conecta la estacion simulada   sensores de mentira, para probar
+    mapa                    el mapa compartido con lo que descubrió el rover
+    simula <sensor> <valor> fuerza una lectura de la estación simulada
+
   TAREAS (MINERVA planea, GAIA reparte, HEFESTO junta)
     planea <tarea>          muestra los pasos sin hacerlos
     encárgate de <tarea>    hace la tarea completa
@@ -1752,6 +1921,7 @@ def iniciar_hefesto():
     print("HEFESTO ONLINE.")
     print("Modelo cargado correctamente.")
     print("Escribe 'ayuda' para ver lo que sé hacer, o 'salir' para apagarme.")
+    avisar_pendientes()
 
     # ======================================
     # CARGAR MEMORIA
@@ -1942,6 +2112,35 @@ def iniciar_hefesto():
         elif comando_simple(comando) in ("rover recarga", "recarga el rover"):
 
             recargar_rover()
+
+        elif comando_simple(comando) in ("sensores", "que sensores tengo"):
+
+            mostrar_sensores()
+
+        elif comando_simple(comando).startswith("autoriza "):
+
+            autorizar_sensor(comando_simple(comando).split(" ", 1)[1].strip())
+
+        elif comando_simple(comando).startswith("desactiva "):
+
+            desactivar_sensor(comando_simple(comando).split(" ", 1)[1].strip())
+
+        elif comando_simple(comando) in ("conecta la estacion simulada", "conecta la estacion"):
+
+            conectar_estacion_simulada()
+
+        elif comando_simple(comando) in ("entorno", "como esta el entorno"):
+
+            mostrar_entorno()
+
+        elif comando_simple(comando) in ("mapa", "muestra el mapa"):
+
+            dibujar_mapa()
+
+        elif re.match(r"^simula (\w+) (-?\d+(?:\.\d+)?)$", comando.strip().lower()):
+
+            sensor, valor = re.match(r"^simula (\w+) (-?\d+(?:\.\d+)?)$", comando.strip().lower()).groups()
+            simular_sensor(sensor, float(valor))
 
         elif comando_simple(comando) in ("seguridad", "poseidon"):
 

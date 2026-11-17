@@ -14,7 +14,11 @@ Niveles de decisión (los que platicamos para FOCUS):
 
 Acciones:
     estado    {}            → posición, batería y obstáculos que conoce
-    ir_a      {"x", "y"}    → intenta llegar; reporta sus decisiones
+    ir_a      {"x", "y", "obstaculos_conocidos"?}
+                            → intenta llegar; reporta sus decisiones y
+                              los obstáculos nuevos que descubrió
+                              ("obstaculos_conocidos" viene del mapa
+                              compartido de ÉTER: lo que otros ya vieron)
     recargar  {}            → batería al 100 %
 
 Restricciones que entiende (en la orden):
@@ -81,12 +85,20 @@ class Rover(Inteligencia):
     def ir_a(self, datos):
         destino = self._destino(datos)
 
+        # Lo que ya se sabía del mapa (por ÉTER): no hay que toparse con eso.
+        compartidos = self._casillas(datos.get("obstaculos_conocidos", []))
+        ya_sabia = len(compartidos - self.conocidos)
+        self.conocidos |= compartidos
+        antes = set(self.conocidos)
+
         orden = self.orden_actual or {}
         restricciones = orden.get("restricciones") or {}
         minima = restricciones.get("bateria_minima", BATERIA_MINIMA)
         plan_b = orden.get("si_falla") or "buscar otra ruta"
 
         decisiones = []
+        if ya_sabia:
+            decisiones.append(f"el mapa compartido me avisó de {ya_sabia} obstáculo(s) que no conocía")
         recorrido = []
         motivo = None
 
@@ -102,7 +114,7 @@ class Rover(Inteligencia):
                 decisiones.append(f"no encontré ningún camino libre; me quedé en {self._texto(self.posicion)}")
                 break
 
-            if not decisiones:
+            if not recorrido and not any(d.startswith("planeé") for d in decisiones):
                 decisiones.append(f"planeé una ruta de {len(camino)} casillas")
 
             siguiente = camino[0]
@@ -132,7 +144,7 @@ class Rover(Inteligencia):
             recorrido.append(list(siguiente))
 
         llego = self.posicion == destino
-        if llego and not decisiones:
+        if llego and not recorrido and not decisiones:
             decisiones.append("ya estaba ahí")
 
         return {
@@ -144,6 +156,7 @@ class Rover(Inteligencia):
             "recorrido": recorrido,
             "bateria": self.bateria,
             "decisiones": decisiones,
+            "descubiertos": sorted([list(c) for c in self.conocidos - antes]),
             "objetivo": orden.get("objetivo"),
         }
 
@@ -163,6 +176,18 @@ class Rover(Inteligencia):
             )
 
         return (x, y)
+
+    def _casillas(self, lista):
+        """[[2, 0], [2, 1]] → {(2, 0), (2, 1)}, ignorando lo que no sea una casilla del mapa."""
+        casillas = set()
+        if not isinstance(lista, list):
+            return casillas
+        for c in lista:
+            if (isinstance(c, list) and len(c) == 2
+                    and all(isinstance(n, int) and not isinstance(n, bool) for n in c)
+                    and mundo.dentro(tuple(c), self.ancho, self.alto)):
+                casillas.add(tuple(c))
+        return casillas
 
     @staticmethod
     def _texto(casilla):

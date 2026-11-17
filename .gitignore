@@ -4,12 +4,10 @@ __pycache__/
 .venv/
 *.tmp
 
-# Respaldos manuales (Git ya guarda el historial)
 *_backup.*
 
-# Estado de la conversación (cambia en cada plática)
 conversacion.json
-
 tabris_registro.jsonl
-
 poseidon_clave.txt
+eter_mapa.json
+sensores_locales.json
