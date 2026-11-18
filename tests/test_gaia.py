@@ -344,7 +344,7 @@ def ecosistema(tmp_path, monkeypatch):
 
 
 def test_ecosistema_conectado(ecosistema):
-    assert set(ecosistema.directorio()) == {"tabris", "hades", "poseidon", "apollo", "calculadora", "artemis", "minerva", "eter", "dispositivo_local", "demeter"}
+    assert set(ecosistema.directorio()) == {"tabris", "hades", "poseidon", "apollo", "calculadora", "artemis", "minerva", "eter", "dispositivo_local", "demeter", "eleuthia", "cuerno_arado"}
 
 
 def test_calcular_por_mensaje(ecosistema):

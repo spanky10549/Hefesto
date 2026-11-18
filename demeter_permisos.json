@@ -1,0 +1,33 @@
+{
+    "zonas": [
+        {
+            "nombre": "Imágenes (OneDrive)",
+            "ruta": "C:\\Users\\spank\\OneDrive\\Pictures"
+        },
+        {
+            "nombre": "Videos",
+            "ruta": "C:\\Users\\spank\\Videos"
+        },
+        {
+            "nombre": "Videos (OneDrive)",
+            "ruta": "C:\\Users\\spank\\OneDrive\\Vídeos"
+        },
+        {
+            "nombre": "Documentos",
+            "ruta": "C:\\Users\\spank\\Documents"
+        },
+        {
+            "nombre": "Documentos (OneDrive)",
+            "ruta": "C:\\Users\\spank\\OneDrive\\Documents"
+        },
+        {
+            "nombre": "Música",
+            "ruta": "C:\\Users\\spank\\Music"
+        },
+        {
+            "nombre": "Escritorio",
+            "ruta": "C:\\Users\\spank\\Desktop"
+        }
+    ],
+    "reglas": []
+}

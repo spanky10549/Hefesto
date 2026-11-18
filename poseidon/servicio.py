@@ -24,6 +24,15 @@ class Poseidon(Inteligencia):
 
     def al_conectarse(self):
         self.gaia.suscribir("mensaje_sospechoso", self.anotar)
+        # CUERNO ARADO es parte de POSEIDON: sus enlaces peligrosos también cuentan.
+        self.gaia.suscribir("enlace_peligroso", self.anotar_enlace)
+
+    def anotar_enlace(self, evento):
+        self.sospechosos.append({
+            "motivo": "enlace peligroso",
+            "origen": evento["datos"].get("dominio"),
+            "fecha": evento["fecha"],
+        })
 
     def anotar(self, evento):
         self.sospechosos.append({

@@ -22,6 +22,8 @@ def crear_ecosistema():
     from minerva import Minerva
     from poseidon import Poseidon
     from demeter import Demeter
+    from eleuthia import Eleuthia
+    from cuerno_arado import CuernoArado
     from eter import Eter
     from dispositivos.local import DispositivoLocal
 
@@ -32,7 +34,9 @@ def crear_ecosistema():
     gaia.registrar(Tabris())
     gaia.registrar(Hades())
     gaia.registrar(Poseidon())
+    gaia.registrar(CuernoArado())
     gaia.registrar(Demeter())
+    gaia.registrar(Eleuthia())
     gaia.registrar(Apollo())
     gaia.registrar(Calculadora())
     gaia.registrar(Artemis())

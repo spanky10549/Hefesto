@@ -45,8 +45,10 @@ from calculo.aritmetica import extraer_operacion
 from apollo.lenguaje import quitar_acentos, quitar_signos
 from gaia import crear_ecosistema, OK, RECHAZADO
 from gaia.tareas import ejecutar_plan, OMITIDO, PENDIENTE
-from gaia.mensajes import crear_orden
+from gaia.mensajes import crear_orden, crear_evento
 from gaia.red import InteligenciaRemota
+from eleuthia.respaldos import aplicar_restauracion_pendiente, ArchivoOcupado
+from cuerno_arado.analisis import extraer_enlaces
 from poseidon import Guardia, cargar_clave
 import rover.mundo   # también trae rover.HOST y rover.PUERTO
 from conversacion.resultados import resumir
@@ -633,6 +635,170 @@ def revocar_permisos(zona):
     r = pedir("demeter", "revocar", zona=zona)
     if r is not None:
         print(f"HEFESTO: Borré {contar(r['borradas'], 'regla', 'reglas')} de '{zona}'. DEMETER volverá a preguntarte.")
+
+
+# ==========================================
+# PRESERVACIÓN (ELEUTHIA)
+# ==========================================
+
+def respaldo_diario():
+    """Al arrancar: un respaldo si el último tiene más de un día."""
+    r = ecosistema().pedir("hefesto", "eleuthia", "respaldo_al_dia")
+    if r["estado"] == OK and r["datos"]["hecho"]:
+        print(f"ELEUTHIA: Guardé el respaldo del día ({contar(len(r['datos']['archivos']), 'archivo', 'archivos')}).")
+
+
+def respaldar_ahora():
+    r = pedir("eleuthia", "respaldar")
+    if r is not None:
+        print(f"HEFESTO: ELEUTHIA guardó {r['nombre']} ({contar(len(r['archivos']), 'archivo', 'archivos')}, {tamano(r['bytes'])}).")
+
+
+def mostrar_respaldos():
+    r = pedir("eleuthia", "respaldos")
+    if r is None:
+        return
+    if not r["respaldos"]:
+        print("HEFESTO: Todavía no hay respaldos. Para hacer uno: respalda")
+        return
+    print(f"HEFESTO: Respaldos de ELEUTHIA (en {r['carpeta']}):")
+    for numero, respaldo in enumerate(r["respaldos"], start=1):
+        print(f"  {numero}. {respaldo['nombre']}  ({tamano(respaldo['bytes'])})")
+    print("  Para volver a uno: restaura <número>")
+
+
+def restaurar_respaldo(numero):
+    lista = pedir("eleuthia", "respaldos")
+    if lista is None:
+        return
+    if not 1 <= numero <= len(lista["respaldos"]):
+        print("HEFESTO: Ese número no está en la lista. Escribe 'respaldos' para verla.")
+        return
+
+    nombre = lista["respaldos"][numero - 1]["nombre"]
+    try:
+        seguro = input(f"  ¿Volver a {nombre}? Lo de ahorita se respalda antes, por si acaso (sí / no): ")
+    except (KeyboardInterrupt, EOFError):
+        return
+    if seguro.strip().lower() not in ("si", "sí", "s"):
+        print("HEFESTO: Va, no restauré nada.")
+        return
+
+    r = pedir("eleuthia", "restaurar", respaldo=nombre)
+    if r is not None:
+        print(f"HEFESTO: Listo. Lo de ahorita quedó en {r['respaldo_de_seguridad']}.")
+        print("  Para terminar de restaurar, apágame (salir) y vuelve a abrirme.")
+
+
+def mostrar_bitacora():
+    r = pedir("eleuthia", "bitacora", dia="hoy")
+    if r is None:
+        return
+    if not r["entradas"]:
+        print("HEFESTO: Hoy todavía no hay nada en la bitácora.")
+        return
+    print("HEFESTO: Bitácora de hoy:")
+    for entrada in r["entradas"]:
+        hora = entrada["fecha"][11:16]
+        print(f"  {hora}  {entrada['texto']}")
+
+
+def anotar_en_bitacora(texto):
+    if pedir("eleuthia", "anotar", texto=texto) is not None:
+        print("HEFESTO: Anotado en la bitácora.")
+
+
+def registrar_experimento():
+    """Pregunta los datos de un experimento y se los da a ELEUTHIA."""
+    try:
+        proyecto = input("  ¿De qué proyecto? ").strip()
+        intento = input("  ¿Qué intentaste? ").strip()
+        resultado = input("  ¿Cómo salió? (funcionó / falló / a medias): ").strip().lower()
+        aprendizaje = input("  ¿Qué aprendiste? (Enter para saltar): ").strip()
+    except (KeyboardInterrupt, EOFError):
+        return
+
+    resultado = {"funciono": "funcionó", "fallo": "falló", "a medias": "a medias"}.get(
+        quitar_acentos(resultado), resultado
+    )
+    r = pedir("eleuthia", "experimento", proyecto=proyecto, intento=intento,
+              resultado=resultado, aprendizaje=aprendizaje)
+    if r is not None:
+        print("HEFESTO: Experimento guardado.")
+
+
+def mostrar_experimentos(proyecto=None):
+    r = pedir("eleuthia", "experimentos", proyecto=proyecto)
+    if r is None:
+        return
+    if not r["experimentos"]:
+        print("HEFESTO: No hay experimentos registrados. Para agregar uno: nuevo experimento")
+        return
+    s = r["resumen"]
+    print(f"HEFESTO: {contar(len(r['experimentos']), 'experimento', 'experimentos')}: "
+          f"{s['funcionó']} funcionaron, {s['falló']} fallaron y {s['a medias']} a medias.")
+    iconos = {"funcionó": "✅", "falló": "❌", "a medias": "🟡"}
+    for e in r["experimentos"]:
+        print(f"  {iconos[e['resultado']]} [{e['proyecto']}] {e['intento']}")
+        if e["aprendizaje"]:
+            print(f"       aprendí: {e['aprendizaje']}")
+
+
+# ==========================================
+# PROTECCIÓN WEB (CUERNO ARADO)
+# ==========================================
+
+ICONOS_RIESGO = {"bajo": "🟢", "medio": "🟡", "alto": "🔴"}
+
+
+def mostrar_enlace(r):
+    icono = ICONOS_RIESGO[r["riesgo"]]
+    print(f"  {icono} Riesgo {r['riesgo'].upper()}: {r['url']}")
+    if r["oficial_de"]:
+        print(f"       es el sitio oficial de {r['oficial_de']}")
+    for razon in r["razones"]:
+        print(f"       - {razon}")
+    if r["riesgo"] == "bajo" and not r["razones"] and not r["oficial_de"]:
+        print("       no vi nada raro (eso no garantiza que sea seguro)")
+
+
+def revisar_enlaces(texto):
+    """Un link o un mensaje completo con links."""
+    r = pedir("cuerno_arado", "revisar_texto", texto=texto)
+    if r is None:
+        return
+    if not r["enlaces"]:
+        print("HEFESTO: No encontré ningún link para revisar.")
+        return
+
+    print(f"HEFESTO: CUERNO ARADO revisó {contar(len(r['enlaces']), 'link', 'links')} (sin abrirlos):")
+    for enlace in r["enlaces"]:
+        mostrar_enlace(enlace)
+
+    if r["riesgo"] == "alto":
+        print("  ⚠ Mi consejo: no lo abras y no escribas tus contraseñas ahí.")
+    print("  (Son pistas, no una garantía. Si dudas, entra escribiendo tú mismo la dirección oficial.)")
+
+
+def cambiar_lista_web(accion, sitio):
+    r = pedir("cuerno_arado", accion, dominio=sitio)
+    if r is None:
+        return
+    if accion == "confiar":
+        print(f"HEFESTO: Listo, {r['dominio']} queda como confiable.")
+    elif accion == "bloquear":
+        print(f"HEFESTO: Listo, {r['dominio']} queda bloqueado.")
+    else:
+        print(f"HEFESTO: Quité {r['dominio']} de tus listas." if r["estaba"] else f"HEFESTO: {r['dominio']} no estaba en tus listas.")
+
+
+def mostrar_listas_web():
+    r = pedir("cuerno_arado", "listas")
+    if r is None:
+        return
+    print("HEFESTO: Tus listas de CUERNO ARADO:")
+    print(f"  🟢 Confiables: {', '.join(r['confiables']) or '(ninguno)'}")
+    print(f"  ⛔ Bloqueados: {', '.join(r['bloqueados']) or '(ninguno)'}")
 
 
 def mostrar_seguridad():
@@ -1460,7 +1626,13 @@ def anunciar(r):
         datos["flecha"] = flecha(r)
 
     plantilla = MENSAJES.get(r["estado"], "Listo ({estado}).")
-    print("HEFESTO: " + plantilla.format(**datos))
+    texto = plantilla.format(**datos)
+    print("HEFESTO: " + texto)
+
+    # Lo nuevo que aprendió queda en la bitácora de ELEUTHIA.
+    # (Solo si el ecosistema ya está encendido: no se enciende solo para esto.)
+    if _ecosistema is not None and r["estado"] in ESTADOS_NUEVOS:
+        _ecosistema.publicar(crear_evento("hefesto", "aprendizaje", {"texto": texto}))
 
 
 def aprender_relacion_conversando(sujeto, relacion, objeto, negada=False):
@@ -1959,6 +2131,19 @@ HEFESTO: Esto es lo que sé hacer:
     mapa                    el mapa compartido con lo que descubrió el rover
     simula <sensor> <valor> fuerza una lectura de la estación simulada
 
+  PROTECCIÓN WEB (CUERNO ARADO)
+    revisa <link o mensaje>  revisa links sin abrirlos (puedes pegar un SMS completo)
+    confía en <sitio> / bloquea <sitio> / quita el sitio <sitio>
+    mis sitios              tus listas de confiables y bloqueados
+
+  PRESERVACIÓN (ELEUTHIA)
+    respalda                guarda una copia del conocimiento (también hay uno diario automático)
+    respaldos / restaura <número>   ver y volver a un respaldo
+    bitácora                lo que pasó y aprendí hoy
+    anota <texto>           escribe algo en la bitácora
+    nuevo experimento       registra qué intentaste y qué aprendiste
+    experimentos [de <proyecto>]    los experimentos y cómo salieron
+
   PRIVACIDAD (DEMETER)
     zonas protegidas        las carpetas que nadie toca sin tu permiso
     protege <carpeta>       agrega una zona protegida
@@ -1992,6 +2177,15 @@ def iniciar_hefesto():
     print("\n================================")
     print("            HEFESTO")
     print("================================")
+
+    # Si pediste restaurar un respaldo, se aplica ANTES de abrir cualquier archivo.
+    try:
+        restaurados = aplicar_restauracion_pendiente(os.getcwd())
+        if restaurados:
+            print(f"ELEUTHIA: Restauré el respaldo ({contar(len(restaurados), 'archivo', 'archivos')}).")
+    except ArchivoOcupado as ocupados:
+        print(f"ELEUTHIA: No pude terminar de restaurar porque otro programa tiene abierto: {ocupados}.")
+        print("  ¿Hay otro HEFESTO abierto? Ciérralo y vuelve a abrirme; lo intentaré otra vez.")
 
     # ======================================
     # CREAR / CARGAR HEFESTO V2
@@ -2034,6 +2228,7 @@ def iniciar_hefesto():
     print("Modelo cargado correctamente.")
     print("Escribe 'ayuda' para ver lo que sé hacer, o 'salir' para apagarme.")
     avisar_pendientes()
+    respaldo_diario()
 
     # ======================================
     # CARGAR MEMORIA
@@ -2253,6 +2448,55 @@ def iniciar_hefesto():
 
             sensor, valor = re.match(r"^simula (\w+) (-?\d+(?:\.\d+)?)$", comando.strip().lower()).groups()
             simular_sensor(sensor, float(valor))
+
+        elif comando.strip().lower().startswith("revisa ") and extraer_enlaces(comando):
+
+            revisar_enlaces(comando.strip()[len("revisa "):])
+
+        elif re.match(r"^conf[ií]a en ", comando.strip().lower()):
+
+            cambiar_lista_web("confiar", comando.strip().split(" ", 2)[2])
+
+        elif comando.strip().lower().startswith("bloquea "):
+
+            cambiar_lista_web("bloquear", comando.strip().split(" ", 1)[1])
+
+        elif re.match(r"^(quita|olvida) el sitio ", comando.strip().lower()):
+
+            cambiar_lista_web("olvidar", comando.strip().split(" ", 3)[3])
+
+        elif comando_simple(comando) in ("mis sitios", "listas web", "sitios confiables"):
+
+            mostrar_listas_web()
+
+        elif comando_simple(comando) in ("respalda", "haz un respaldo", "respaldar"):
+
+            respaldar_ahora()
+
+        elif comando_simple(comando) in ("respaldos", "mis respaldos"):
+
+            mostrar_respaldos()
+
+        elif re.match(r"^restaura (\d+)$", comando_simple(comando)):
+
+            restaurar_respaldo(int(comando_simple(comando).split()[1]))
+
+        elif comando_simple(comando) in ("bitacora", "que aprendiste hoy", "que paso en la bitacora"):
+
+            mostrar_bitacora()
+
+        elif comando.strip().lower().startswith("anota "):
+
+            anotar_en_bitacora(comando.strip()[len("anota "):])
+
+        elif comando_simple(comando) in ("nuevo experimento", "registra un experimento"):
+
+            registrar_experimento()
+
+        elif comando_simple(comando) == "experimentos" or comando_simple(comando).startswith("experimentos de "):
+
+            partes = comando.strip().split(" de ", 1)
+            mostrar_experimentos(partes[1].strip() if len(partes) == 2 else None)
 
         elif comando_simple(comando) in ("zonas protegidas", "zonas", "que esta protegido"):
 

@@ -28,6 +28,12 @@ def archivos_temporales(tmp_path, monkeypatch):
     # ...ni los permisos de DEMETER...
     import demeter.servicio
     monkeypatch.setattr(demeter.servicio, "ARCHIVO_PERMISOS", str(tmp_path / "demeter_permisos.json"))
+    # ...ni la bitácora de ELEUTHIA...
+    import eleuthia.servicio
+    monkeypatch.setattr(eleuthia.servicio, "ARCHIVO_BITACORA", str(tmp_path / "eleuthia_bitacora.jsonl"))
+    # ...ni las listas de CUERNO ARADO...
+    import cuerno_arado.servicio
+    monkeypatch.setattr(cuerno_arado.servicio, "ARCHIVO_LISTAS", str(tmp_path / "cuerno_arado_listas.json"))
     # ...ni la clave secreta de POSEIDON en la carpeta real.
     monkeypatch.setattr(
         poseidon.firma, "ARCHIVO_CLAVE", str(tmp_path / "poseidon_clave.txt")
