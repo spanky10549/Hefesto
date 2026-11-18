@@ -25,6 +25,9 @@ def archivos_temporales(tmp_path, monkeypatch):
     # ...ni los estados de los sensores locales...
     import dispositivos.local
     monkeypatch.setattr(dispositivos.local, "ARCHIVO_ESTADOS", str(tmp_path / "sensores_locales.json"))
+    # ...ni los permisos de DEMETER...
+    import demeter.servicio
+    monkeypatch.setattr(demeter.servicio, "ARCHIVO_PERMISOS", str(tmp_path / "demeter_permisos.json"))
     # ...ni la clave secreta de POSEIDON en la carpeta real.
     monkeypatch.setattr(
         poseidon.firma, "ARCHIVO_CLAVE", str(tmp_path / "poseidon_clave.txt")

@@ -533,6 +533,108 @@ def simular_sensor(sensor, valor):
         print(f"HEFESTO: La próxima lectura de {sensor} será {valor}. Escribe 'entorno' para verla.")
 
 
+# ==========================================
+# PRIVACIDAD (DEMETER)
+# ==========================================
+
+RESPUESTAS_PERMISO = {
+    "si": "una vez", "sí": "una vez", "s": "una vez",
+    "no": "no", "n": "no",
+    "siempre": "siempre",
+    "nunca": "nunca",
+}
+
+
+def pedir_permiso(inteligencia, ruta, operacion):
+    """
+    Le pregunta a DEMETER si se puede tocar un archivo. Si DEMETER no
+    tiene una regla, te pregunta a ti. Devuelve True o False.
+    """
+    r = pedir("demeter", "solicitar", inteligencia=inteligencia, ruta=ruta, operacion=operacion)
+    if r is None:
+        print("HEFESTO: Como DEMETER no pudo revisarlo, mejor no lo toco.")
+        return False
+
+    if r["decision"] == "permitir":
+        return True
+
+    if r["decision"] == "negar":
+        print(f"HEFESTO: DEMETER no me deja {operacion} archivos de '{r['zona']}' ({r['motivo']}).")
+        print(f"  Para cambiarlo: revoca permisos de {r['zona']}")
+        return False
+
+    # Preguntar a la persona
+    print(f"HEFESTO: 🔒 '{ruta}' está en tu zona protegida '{r['zona']}'.")
+    while True:
+        try:
+            respuesta = input(f"  ¿Dejas que {inteligencia.upper()} lo pueda {operacion}? (sí / no / siempre / nunca): ")
+        except (KeyboardInterrupt, EOFError):
+            print()
+            return False
+
+        eleccion = RESPUESTAS_PERMISO.get(respuesta.strip().lower())
+        if eleccion is not None:
+            break
+        print("  Responde sí, no, siempre o nunca.")
+
+    if eleccion in ("siempre", "nunca"):
+        pedir(
+            "demeter", "conceder", inteligencia=inteligencia, zona=r["zona"], operacion=operacion,
+            decision="permitir" if eleccion == "siempre" else "negar",
+        )
+        print(f"  Listo, lo recordaré para toda la zona '{r['zona']}'.")
+
+    if eleccion in ("no", "nunca"):
+        print("HEFESTO: Va, no lo toco.")
+
+    return eleccion in ("una vez", "siempre")
+
+
+def mostrar_zonas():
+    r = pedir("demeter", "zonas")
+    if r is None:
+        return
+    if not r["zonas"]:
+        print("HEFESTO: No hay zonas protegidas. Para agregar una: protege <ruta de la carpeta>")
+        return
+    print("HEFESTO: Zonas protegidas por DEMETER:")
+    for z in r["zonas"]:
+        print(f"  🔒 {z['nombre']}: {z['ruta']}")
+    print(f"  (La carpeta de FOCUS siempre es libre: {r['carpeta_focus']})")
+
+
+def mostrar_permisos():
+    r = pedir("demeter", "permisos")
+    if r is None:
+        return
+    if not r["reglas"]:
+        print("HEFESTO: No hay reglas guardadas; DEMETER te preguntará cada vez.")
+        return
+    print("HEFESTO: Reglas de DEMETER:")
+    for regla in r["reglas"]:
+        icono = "✅" if regla["decision"] == "permitir" else "⛔"
+        verbo = "puede" if regla["decision"] == "permitir" else "NO puede"
+        print(f"  {icono} {regla['inteligencia'].upper()} {verbo} {regla['operacion']} en '{regla['zona']}'")
+
+
+def proteger_carpeta(ruta):
+    r = pedir("demeter", "proteger", ruta=ruta)
+    if r is not None:
+        print(f"HEFESTO: 🔒 Protegí '{r['zona']['nombre']}' ({r['zona']['ruta']}).")
+
+
+def desproteger_zona(nombre):
+    r = pedir("demeter", "desproteger", nombre=nombre)
+    if r is not None:
+        print(f"HEFESTO: '{r['zona']['nombre']}' ya no está protegida.")
+
+
+def revocar_permisos(zona):
+    r = pedir("demeter", "revocar", zona=zona)
+    if r is not None:
+        print(f"HEFESTO: Borré {contar(r['borradas'], 'regla', 'reglas')} de '{zona}'. DEMETER volverá a preguntarte.")
+
+
 def mostrar_seguridad():
     r = pedir("poseidon", "reporte")
     if r is None:
@@ -1455,6 +1557,9 @@ def leer_documento(texto_ruta):
         print("HEFESTO: Por ahora solo sé leer archivos de texto (.txt o .md).")
         return
 
+    if not pedir_permiso("hefesto", ruta, "leer"):
+        return
+
     lectura = leer_archivo(ruta)
     hechos = lectura["hechos"]
     no_entendidas = lectura["no_entendidas"]
@@ -1854,6 +1959,13 @@ HEFESTO: Esto es lo que sé hacer:
     mapa                    el mapa compartido con lo que descubrió el rover
     simula <sensor> <valor> fuerza una lectura de la estación simulada
 
+  PRIVACIDAD (DEMETER)
+    zonas protegidas        las carpetas que nadie toca sin tu permiso
+    protege <carpeta>       agrega una zona protegida
+    desprotege <nombre>     la quita
+    permisos                las reglas que ya decidiste (siempre / nunca)
+    revoca permisos de <zona>   borra las reglas; volverá a preguntarte
+
   TAREAS (MINERVA planea, GAIA reparte, HEFESTO junta)
     planea <tarea>          muestra los pasos sin hacerlos
     encárgate de <tarea>    hace la tarea completa
@@ -2141,6 +2253,26 @@ def iniciar_hefesto():
 
             sensor, valor = re.match(r"^simula (\w+) (-?\d+(?:\.\d+)?)$", comando.strip().lower()).groups()
             simular_sensor(sensor, float(valor))
+
+        elif comando_simple(comando) in ("zonas protegidas", "zonas", "que esta protegido"):
+
+            mostrar_zonas()
+
+        elif comando_simple(comando) in ("permisos", "reglas de privacidad"):
+
+            mostrar_permisos()
+
+        elif comando.strip().lower().startswith("protege "):
+
+            proteger_carpeta(comando.strip()[len("protege "):].strip().strip('"'))
+
+        elif comando.strip().lower().startswith("desprotege "):
+
+            desproteger_zona(comando.strip()[len("desprotege "):].strip())
+
+        elif comando.strip().lower().startswith("revoca permisos de "):
+
+            revocar_permisos(comando.strip()[len("revoca permisos de "):].strip())
 
         elif comando_simple(comando) in ("seguridad", "poseidon"):
 

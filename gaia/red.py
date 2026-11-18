@@ -73,8 +73,31 @@ class InteligenciaRemota(Inteligencia):
     # HABLAR POR LA RED
     # ==========================================
 
+    def _revisar_privacidad(self, orden):
+        """
+        Antes de que algo salga por la red, DEMETER revisa que no lleve
+        archivos protegidos. Si DEMETER existe pero no pudo revisar, no
+        sale nada: en privacidad, ante la duda, mejor no compartir.
+        """
+        if self.gaia is None or "demeter" not in self.gaia.inteligencias:
+            return
+
+        r = self.gaia.pedir("gaia", "demeter", "revisar_salida", destino=self.nombre, mensaje=orden)
+
+        if r["estado"] != OK:
+            raise Rechazo(f"DEMETER no pudo revisar el mensaje ({r.get('detalle')}); no lo mandé")
+
+        if not r["datos"]["puede_salir"]:
+            zonas = ", ".join(sorted({b["zona"] for b in r["datos"]["bloqueos"]}))
+            raise Rechazo(
+                f"DEMETER no dejó que salga hacia {self.nombre}: lleva archivos de una zona protegida ({zonas})"
+            )
+
     def _intercambiar(self, orden):
         """Manda una orden firmada y devuelve la respuesta ya revisada."""
+        if orden["accion"] != "presentarse":
+            self._revisar_privacidad(orden)
+
         respuesta = mandar_linea(self.host, self.puerto, self.guardia.sellar(orden), self.tiempo_espera)
 
         try:
