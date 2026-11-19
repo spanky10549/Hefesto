@@ -1,0 +1,178 @@
+{
+    "FOCUS": {
+        "nombre": "FOCUS",
+        "meta": "Llegar a los niveles 4 (autónomo supervisado) y 5 (cognitivo integrado)",
+        "creado": "2026-11-19T15:04:25",
+        "capacidades": [
+            {
+                "id": 1,
+                "nombre": "Nivel 3: el ecosistema en el mundo real",
+                "padre": null,
+                "estado": "falta",
+                "notas": ""
+            },
+            {
+                "id": 2,
+                "nombre": "Las 12 inteligencias comunicándose por GAIA",
+                "padre": 1,
+                "estado": "existe",
+                "notas": "esqueleto completo, 692 pruebas"
+            },
+            {
+                "id": 3,
+                "nombre": "FOCUS corriendo en la Raspberry Pi 5",
+                "padre": 1,
+                "estado": "falta",
+                "notas": "por comprar; el código ya es compatible"
+            },
+            {
+                "id": 4,
+                "nombre": "Sensores físicos con ESP32",
+                "padre": 1,
+                "estado": "falta",
+                "notas": "el contrato 'leer' ya existe"
+            },
+            {
+                "id": 5,
+                "nombre": "Rover físico con motores",
+                "padre": 1,
+                "estado": "falta",
+                "notas": "el rover simulado ya decide solo"
+            },
+            {
+                "id": 6,
+                "nombre": "Dispositivo portátil con cámara y voz",
+                "padre": 1,
+                "estado": "falta",
+                "notas": "diseñarlo y simular sus partes"
+            },
+            {
+                "id": 7,
+                "nombre": "Nivel 4: autónomo supervisado",
+                "padre": null,
+                "estado": "falta",
+                "notas": ""
+            },
+            {
+                "id": 8,
+                "nombre": "Planes de varios pasos",
+                "padre": 7,
+                "estado": "a_medias",
+                "notas": "MINERVA divide tareas, pero solo con reglas fijas"
+            },
+            {
+                "id": 9,
+                "nombre": "Prioridades y conflictos en GAIA",
+                "padre": 7,
+                "estado": "falta",
+                "notas": "hoy todo se atiende en orden de llegada"
+            },
+            {
+                "id": 10,
+                "nombre": "Integración de herramientas",
+                "padre": 7,
+                "estado": "a_medias",
+                "notas": "la calculadora existe; falta un registro de herramientas"
+            },
+            {
+                "id": 11,
+                "nombre": "Inventario de materiales y piezas",
+                "padre": 7,
+                "estado": "falta",
+                "notas": "ARTEMIS solo ve CPU, RAM, disco y batería"
+            },
+            {
+                "id": 12,
+                "nombre": "Control de dispositivos con límites",
+                "padre": 7,
+                "estado": "a_medias",
+                "notas": "rover simulado con freno de seguridad"
+            },
+            {
+                "id": 13,
+                "nombre": "Mensajes cifrados en la red",
+                "padre": 7,
+                "estado": "falta",
+                "notas": "POSEIDON firma, pero no cifra"
+            },
+            {
+                "id": 14,
+                "nombre": "Recuperación real de fallos",
+                "padre": 7,
+                "estado": "a_medias",
+                "notas": "HADES solo reconecta"
+            },
+            {
+                "id": 15,
+                "nombre": "Nivel 5: cognitivo integrado",
+                "padre": null,
+                "estado": "falta",
+                "notas": ""
+            },
+            {
+                "id": 16,
+                "nombre": "Fuentes del conocimiento",
+                "padre": 15,
+                "estado": "falta",
+                "notas": "saber si un dato vino de ti, de un documento o de WordNet"
+            },
+            {
+                "id": 17,
+                "nombre": "Aprender de correcciones",
+                "padre": 15,
+                "estado": "falta",
+                "notas": ""
+            },
+            {
+                "id": 18,
+                "nombre": "Hipótesis y analogías",
+                "padre": 15,
+                "estado": "falta",
+                "notas": "imaginar ideas nuevas a partir de lo que sabe"
+            },
+            {
+                "id": 19,
+                "nombre": "Red neuronal útil (PyTorch, embeddings)",
+                "padre": 15,
+                "estado": "falta",
+                "notas": "hoy solo resuelve XOR"
+            },
+            {
+                "id": 20,
+                "nombre": "Módulo creativo con modelo de lenguaje",
+                "padre": 15,
+                "estado": "falta",
+                "notas": "el enchufe para proponer código"
+            },
+            {
+                "id": 21,
+                "nombre": "Laboratorio de innovación",
+                "padre": 15,
+                "estado": "a_medias",
+                "notas": "versión 1: árbol, estrategias y avance"
+            },
+            {
+                "id": 22,
+                "nombre": "rutinas",
+                "padre": 8,
+                "estado": "existe",
+                "notas": ""
+            },
+            {
+                "id": 23,
+                "nombre": "usar el resultado de otro paso",
+                "padre": 8,
+                "estado": "falta",
+                "notas": ""
+            },
+            {
+                "id": 24,
+                "nombre": "condiciones y plan B",
+                "padre": 8,
+                "estado": "falta",
+                "notas": ""
+            }
+        ],
+        "siguiente_id": 25
+    }
+}

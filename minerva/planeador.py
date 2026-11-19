@@ -68,6 +68,7 @@ VERBOS = (
     "busca", "buscar", "dime", "explicame", "que es", "que son",
     "calcula", "calcular", "resuelve", "resolver", "cuanto es", "cuanto son",
     "revisa", "revisar", "checa", "checar", "mide", "medir", "que paso",
+    "respalda", "respaldar", "haz un respaldo", "lee los sensores",
 )
 
 # Lo que sobra en las orillas de cada parte: "¿Qué es X?" → "Qué es X"
@@ -164,10 +165,22 @@ def interpretar(parte):
     # "revisa los recursos", "checa cómo está la compu", "revisa los errores"
     palabras = parte_simple.split()
     if palabras and palabras[0] in VERBOS_REVISAR:
+        if any(clave in parte_simple for clave in ("incidente", "falla")):
+            return {"para": "hades", "accion": "incidentes", "datos": {"abiertos": True}}
         if any(clave in parte_simple for clave in ("error", "registro", "problema")):
             return {"para": "tabris", "accion": "resumen", "datos": {"dia": "hoy"}}
         if any(clave in parte_simple for clave in ("recurso", "compu", "memoria", "ram", "disco", "bateria")):
             return {"para": "artemis", "accion": "estado", "datos": {}}
+        if any(clave in parte_simple for clave in ("entorno", "sensor", "cuarto")):
+            return {"para": "eter", "accion": "entorno", "datos": {"actualizar": True}}
+        if any(clave in parte_simple for clave in ("seguridad", "sospechos", "hackeo")):
+            return {"para": "poseidon", "accion": "reporte", "datos": {}}
+
+    if parte_simple.strip() in ("entorno", "lee los sensores"):
+        return {"para": "eter", "accion": "entorno", "datos": {"actualizar": True}}
+
+    if parte_simple.strip() in ("respalda", "respaldar", "haz un respaldo", "respalda todo"):
+        return {"para": "eleuthia", "accion": "respaldar", "datos": {}}
 
     if parte_simple.strip().startswith("que paso"):
         return {"para": "tabris", "accion": "resumen", "datos": {"dia": "hoy"}}
@@ -179,24 +192,70 @@ def interpretar(parte):
     return None
 
 
-def planear(tarea):
+# ==========================================
+# RUTINAS (tareas que la persona le enseña)
+# ==========================================
+
+PREFIJOS_RUTINA = ("haz la rutina ", "ejecuta la rutina ", "corre la rutina ", "la rutina ", "rutina ")
+
+# Una rutina puede usar otras, pero no infinitamente.
+MAX_PROFUNDIDAD = 5
+
+
+def nombre_de_rutina(texto):
+    """'Haz la rutina «Checa todo»' → 'checa todo' (para comparar)."""
+    texto = " ".join(simple(texto).strip(" .\"'«»").split())
+    for prefijo in PREFIJOS_RUTINA:
+        if texto.startswith(prefijo):
+            texto = texto[len(prefijo):]
+            break
+    return texto.strip(" \"'«»")
+
+
+def expandir(parte, rutinas, camino=()):
+    """
+    Una parte de la tarea → lista de (descripción, paso o None).
+    Si la parte es una rutina, se cambia por sus pasos (y si alguno es
+    otra rutina, también se expande).
+
+    'camino' son las rutinas que se están expandiendo ahorita: si una
+    aparece dos veces, es un círculo (A usa B y B usa A) y se detiene.
+    """
+    nombre = nombre_de_rutina(parte)
+
+    if nombre in rutinas:
+        if nombre in camino or len(camino) >= MAX_PROFUNDIDAD:
+            return [(parte, None)]
+        resultado = []
+        for subparte in rutinas[nombre]["pasos"]:
+            for descripcion, paso in expandir(subparte, rutinas, camino + (nombre,)):
+                # "[checa todo] revisa los recursos": se nota de qué rutina vino
+                resultado.append((f"[{rutinas[nombre]['nombre']}] {descripcion}", paso))
+        return resultado
+
+    return [(parte, interpretar(parte))]
+
+
+def planear(tarea, rutinas=None):
     """
     La tarea completa → plan con pasos numerados y lo que no se entendió.
+    'rutinas' son las que la persona le enseñó: {nombre: {"nombre", "pasos"}}.
     """
+    rutinas = rutinas or {}
     pasos, no_entendidos = [], []
 
     for parte in dividir_tarea(tarea):
-        paso = interpretar(parte)
+        for descripcion, paso in expandir(parte, rutinas):
 
-        if paso is None:
-            no_entendidos.append(parte)
-            continue
+            if paso is None:
+                no_entendidos.append(descripcion)
+                continue
 
-        pasos.append({
-            "numero": len(pasos) + 1,
-            "descripcion": parte,
-            **paso,
-            "si_falla": "continuar",
-        })
+            pasos.append({
+                "numero": len(pasos) + 1,
+                "descripcion": descripcion,
+                **paso,
+                "si_falla": "continuar",
+            })
 
     return {"tarea": tarea, "pasos": pasos, "no_entendidos": no_entendidos}

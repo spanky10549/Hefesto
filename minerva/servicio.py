@@ -14,6 +14,12 @@ Para cada tarea:
 Acciones:
     planear  {"tarea": "investiga qué es X, calcula 2 + 2 y revisa los recursos"}
 
+    Rutinas (rutinas.py):
+    ensenar_rutina     {"nombre", "pasos": "revisa los recursos y revisa los errores"}
+    rutinas            {}
+    olvidar_rutina     {"nombre"}
+    es_rutina          {"texto"}
+
     Laboratorio de innovación (laboratorio.py):
     proyectos          {}
     crear_proyecto     {"nombre", "meta"}
@@ -31,6 +37,7 @@ from gaia.mensajes import Rechazo, OK
 
 from minerva.planeador import planear
 from minerva.laboratorio import Laboratorio, ErrorLaboratorio, cargar_plantilla_focus, ESTADOS
+from minerva.rutinas import Rutinas, ErrorRutina
 
 
 # Cuánta RAM (en MB) calcula MINERVA que usa cada tipo de paso.
@@ -41,6 +48,8 @@ COSTO_RAM_MB = {
     ("calculadora", "calcular"): 5,
     ("artemis", "estado"): 5,
     ("tabris", "resumen"): 10,
+    ("eter", "entorno"): 10,
+    ("eleuthia", "respaldar"): 30,
 }
 COSTO_POR_DEFECTO_MB = 10
 
@@ -50,10 +59,16 @@ class Minerva(Inteligencia):
     nombre = "minerva"
     descripcion = "Planea: divide una tarea en pasos y decide a quién le toca cada uno."
 
-    def __init__(self, laboratorio=None):
+    def __init__(self, laboratorio=None, rutinas=None):
         self.laboratorio = laboratorio or Laboratorio()
+        self.rutinas = rutinas or Rutinas()
         self.acciones = {
             "planear": self.planear,
+            # Rutinas que la persona le enseña
+            "ensenar_rutina": self.ensenar_rutina,
+            "rutinas": self.listar_rutinas,
+            "olvidar_rutina": self.olvidar_rutina,
+            "es_rutina": self.es_rutina,
             # Laboratorio de innovación
             "proyectos": self.proyectos,
             "crear_proyecto": self.crear_proyecto,
@@ -65,6 +80,30 @@ class Minerva(Inteligencia):
             "siguiente": self.siguiente,
             "cargar_focus": self.cargar_focus,
         }
+
+    # ==========================================
+    # RUTINAS
+    # ==========================================
+
+    def ensenar_rutina(self, datos):
+        try:
+            return self.rutinas.ensenar(datos.get("nombre"), datos.get("pasos"))
+        except ErrorRutina as error:
+            raise Rechazo(str(error)) from error
+
+    def listar_rutinas(self, datos):
+        return {"rutinas": self.rutinas.listar()}
+
+    def olvidar_rutina(self, datos):
+        try:
+            return self.rutinas.olvidar(datos.get("nombre"))
+        except ErrorRutina as error:
+            raise Rechazo(str(error)) from error
+
+    def es_rutina(self, datos):
+        """¿Este texto es el nombre de una rutina? (para usarla sin 'encárgate de')"""
+        from minerva.planeador import nombre_de_rutina
+        return {"es_rutina": nombre_de_rutina(datos.get("texto") or "") in self.rutinas.todas()}
 
     # ==========================================
     # LABORATORIO DE INNOVACIÓN
@@ -139,7 +178,7 @@ class Minerva(Inteligencia):
         if not isinstance(tarea, str) or not tarea.strip():
             raise Rechazo("falta 'tarea'")
 
-        plan = planear(tarea)
+        plan = planear(tarea, self.rutinas.todas())
 
         if not plan["pasos"]:
             raise Rechazo("no entendí ninguna parte de la tarea")

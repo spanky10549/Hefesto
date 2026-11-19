@@ -15,7 +15,8 @@ Los dispositivos MIDEN; ÉTER ENTIENDE y RECUERDA el entorno.
 Acciones:
     actualizar           {}                          pide lecturas a quien sepa "leer"
     lectura              {"sensor","tipo","lugar","valor", "rangos"?, "limites"?}
-    entorno              {"lugar"?}                  lo último de cada sensor
+    entorno              {"lugar"?, "actualizar"?}   lo último de cada sensor
+                                                     (con "actualizar", lee antes)
     anomalias            {}                          lo raro ahorita
     reportar_obstaculos  {"obstaculos": [[x, y]], "origen"}
     mapa                 {}                          obstáculos conocidos
@@ -144,6 +145,9 @@ class Eter(Inteligencia):
         }
 
     def entorno(self, datos):
+        # {"actualizar": True}: primero pedir lecturas nuevas (útil en rutinas)
+        if datos.get("actualizar") and self.gaia is not None:
+            self.actualizar({})
         lugar = datos.get("lugar")
         sensores = [
             self._describir(sensor) for sensor in sorted(self.sensores)

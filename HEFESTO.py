@@ -985,6 +985,52 @@ def mostrar_seguridad():
         print(f"  {motivo}: {cuantos}")
 
 
+# ==========================================
+# RUTINAS (MINERVA)
+# ==========================================
+
+def es_rutina(texto):
+    r = ecosistema().pedir("hefesto", "minerva", "es_rutina", texto=texto)
+    return r["estado"] == OK and r["datos"]["es_rutina"]
+
+
+def ensenar_rutina(texto):
+    """'"checa todo": revisa los recursos y revisa los errores'"""
+    if ":" not in texto:
+        print('HEFESTO: Escríbela así: enseña la rutina "nombre": paso, paso y paso')
+        return
+    nombre, pasos = texto.split(":", 1)
+    r = pedir("minerva", "ensenar_rutina", nombre=nombre.strip(), pasos=pasos.strip())
+    if r is None:
+        return
+    verbo = "actualizó" if r["reemplazada"] else "aprendió"
+    print(f"HEFESTO: MINERVA {verbo} la rutina \"{r['nombre']}\" ({contar(len(r['pasos']), 'paso', 'pasos')}):")
+    for numero, paso in enumerate(r["pasos"], start=1):
+        print(f"  {numero}. {paso}")
+    print(f"  Para usarla: {r['nombre']}")
+
+
+def mostrar_rutinas():
+    r = pedir("minerva", "rutinas")
+    if r is None:
+        return
+    if not r["rutinas"]:
+        print('HEFESTO: No hay rutinas. Enséñame una: enseña la rutina "checa todo": revisa los recursos y revisa los errores')
+        return
+    print("HEFESTO: Rutinas que me enseñaste:")
+    for rutina in r["rutinas"]:
+        print(f"  🔁 {rutina['nombre']}: {', '.join(rutina['pasos'])}")
+
+
+def olvidar_rutina(nombre):
+    r = pedir("minerva", "olvidar_rutina", nombre=nombre)
+    if r is None:
+        return
+    print(f"HEFESTO: Olvidé la rutina \"{r['nombre']}\".")
+    if r["la_usaban"]:
+        print(f"  Ojo: la usaban {', '.join(r['la_usaban'])}; ese paso ya no se va a entender.")
+
+
 def mostrar_errores():
     """Los últimos errores que registró TABRIS."""
     r = pedir("tabris", "buscar", estado="error", cantidad=5)
@@ -2303,6 +2349,13 @@ HEFESTO: Esto es lo que sé hacer:
     mapa                    el mapa compartido con lo que descubrió el rover
     simula <sensor> <valor> fuerza una lectura de la estación simulada
 
+  RUTINAS (MINERVA)
+    enseña la rutina "<nombre>": paso, paso y paso
+        enseña la rutina "checa todo": revisa los recursos, revisa los errores y revisa el entorno
+    <nombre de la rutina>   la ejecuta (también: encárgate de <nombre>)
+    rutinas                 las que me enseñaste
+    olvida la rutina <nombre>
+
   LABORATORIO DE INNOVACIÓN (MINERVA)
     proyectos               los proyectos y su avance
     carga el proyecto focus el mapa de FOCUS hacia los niveles 4 y 5
@@ -2651,6 +2704,18 @@ def iniciar_hefesto():
         elif comando_simple(comando) in ("mis sitios", "listas web", "sitios confiables"):
 
             mostrar_listas_web()
+
+        elif re.match(r"^ens[eé][ñn]a(me)? la rutina ", comando.strip().lower()):
+
+            ensenar_rutina(re.sub(r"^ens[eé][ñn]a(me)? la rutina ", "", comando.strip(), flags=re.I))
+
+        elif comando_simple(comando) in ("rutinas", "mis rutinas"):
+
+            mostrar_rutinas()
+
+        elif comando.strip().lower().startswith("olvida la rutina "):
+
+            olvidar_rutina(comando.strip()[len("olvida la rutina "):])
 
         elif comando_simple(comando) in ("proyectos", "laboratorio", "mis proyectos"):
 
@@ -3480,6 +3545,11 @@ def iniciar_hefesto():
             else:
                 print(f"HEFESTO: {inicio}. Nadie me lo dijo, pero lo deduje así:")
                 mostrar_cadena(cadena)
+
+        elif es_rutina(comando):
+
+            # Una rutina se puede usar solo con su nombre: "checa todo"
+            encargarse_de(comando.strip())
 
         else:
 

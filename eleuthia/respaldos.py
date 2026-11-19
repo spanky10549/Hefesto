@@ -45,6 +45,7 @@ ARCHIVOS = [
     "sensores_locales.json",       # qué sensores autorizaste
     "eleuthia_bitacora.jsonl",     # la bitácora y los experimentos
     "laboratorio.json",            # los proyectos del laboratorio de innovación
+    "minerva_rutinas.json",        # las rutinas que le enseñaste a MINERVA
     "cuerno_arado_listas.json",    # tus sitios confiables y bloqueados
 ]
 
