@@ -23,8 +23,9 @@ Acciones:
     restaurar        {"respaldo"}  queda pendiente hasta reiniciar
     anotar           {"texto", "tipo"?}
     bitacora         {"dia"?: "hoy" | "2026-11-18", "tipo"?, "cantidad"?}
-    experimento      {"proyecto", "intento", "resultado", "aprendizaje"?}
-    experimentos     {"proyecto"?}
+    experimento      {"proyecto", "intento", "resultado", "aprendizaje"?, "capacidad"?}
+    experimentos     {"proyecto"?, "capacidad"?}
+                     ("capacidad" es el número de la capacidad en el laboratorio de MINERVA)
 """
 
 import json
@@ -152,10 +153,14 @@ class Eleuthia(Inteligencia):
                 raise Rechazo(f"falta '{campo}'")
         if datos.get("resultado") not in RESULTADOS:
             raise Rechazo(f"'resultado' debe ser: {', '.join(RESULTADOS)}")
+        capacidad = datos.get("capacidad")
+        if capacidad is not None and (not isinstance(capacidad, int) or isinstance(capacidad, bool)):
+            raise Rechazo("'capacidad' debe ser el número de una capacidad del laboratorio")
 
         return self._escribir({
             "tipo": "experimento",
             "proyecto": datos["proyecto"].strip(),
+            "capacidad": capacidad,
             "intento": datos["intento"].strip(),
             "resultado": datos["resultado"],
             "aprendizaje": (datos.get("aprendizaje") or "").strip() or None,
@@ -165,9 +170,12 @@ class Eleuthia(Inteligencia):
 
     def experimentos(self, datos):
         proyecto = (datos.get("proyecto") or "").strip().lower()
+        capacidad = datos.get("capacidad")
         lista = [
             e for e in self._leer()
-            if e["tipo"] == "experimento" and (not proyecto or e["proyecto"].lower() == proyecto)
+            if e["tipo"] == "experimento"
+            and (not proyecto or e["proyecto"].lower() == proyecto)
+            and (capacidad is None or e.get("capacidad") == capacidad)
         ]
         resumen = {resultado: sum(1 for e in lista if e["resultado"] == resultado) for resultado in RESULTADOS}
         return {"experimentos": lista, "resumen": resumen}

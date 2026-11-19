@@ -34,6 +34,9 @@ def archivos_temporales(tmp_path, monkeypatch):
     # ...ni las listas de CUERNO ARADO...
     import cuerno_arado.servicio
     monkeypatch.setattr(cuerno_arado.servicio, "ARCHIVO_LISTAS", str(tmp_path / "cuerno_arado_listas.json"))
+    # ...ni los proyectos del laboratorio...
+    import minerva.laboratorio
+    monkeypatch.setattr(minerva.laboratorio, "ARCHIVO_LABORATORIO", str(tmp_path / "laboratorio.json"))
     # ...ni la clave secreta de POSEIDON en la carpeta real.
     monkeypatch.setattr(
         poseidon.firma, "ARCHIVO_CLAVE", str(tmp_path / "poseidon_clave.txt")

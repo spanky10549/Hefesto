@@ -44,6 +44,8 @@ ARCHIVOS = [
     "demeter_permisos.json",       # zonas protegidas y reglas
     "sensores_locales.json",       # qué sensores autorizaste
     "eleuthia_bitacora.jsonl",     # la bitácora y los experimentos
+    "laboratorio.json",            # los proyectos del laboratorio de innovación
+    "cuerno_arado_listas.json",    # tus sitios confiables y bloqueados
 ]
 
 

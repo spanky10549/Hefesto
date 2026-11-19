@@ -13,12 +13,24 @@ Para cada tarea:
 
 Acciones:
     planear  {"tarea": "investiga qué es X, calcula 2 + 2 y revisa los recursos"}
+
+    Laboratorio de innovación (laboratorio.py):
+    proyectos          {}
+    crear_proyecto     {"nombre", "meta"}
+    proyecto           {"nombre"}                 el árbol, el avance y la siguiente sugerida
+    agregar_capacidad  {"proyecto", "nombre", "padre"?, "estado"?, "notas"?}
+    marcar             {"proyecto", "capacidad", "estado", "notas"?}
+    quitar_capacidad   {"proyecto", "capacidad"}
+    estrategias        {"proyecto", "capacidad"}  ideas para llenar el hueco
+    siguiente          {"proyecto"}
+    cargar_focus       {}                         el mapa del propio FOCUS
 """
 
 from gaia.inteligencia import Inteligencia
 from gaia.mensajes import Rechazo, OK
 
 from minerva.planeador import planear
+from minerva.laboratorio import Laboratorio, ErrorLaboratorio, cargar_plantilla_focus, ESTADOS
 
 
 # Cuánta RAM (en MB) calcula MINERVA que usa cada tipo de paso.
@@ -38,8 +50,89 @@ class Minerva(Inteligencia):
     nombre = "minerva"
     descripcion = "Planea: divide una tarea en pasos y decide a quién le toca cada uno."
 
-    def __init__(self):
-        self.acciones = {"planear": self.planear}
+    def __init__(self, laboratorio=None):
+        self.laboratorio = laboratorio or Laboratorio()
+        self.acciones = {
+            "planear": self.planear,
+            # Laboratorio de innovación
+            "proyectos": self.proyectos,
+            "crear_proyecto": self.crear_proyecto,
+            "proyecto": self.ver_proyecto,
+            "agregar_capacidad": self.agregar_capacidad,
+            "marcar": self.marcar,
+            "quitar_capacidad": self.quitar_capacidad,
+            "estrategias": self.estrategias,
+            "siguiente": self.siguiente,
+            "cargar_focus": self.cargar_focus,
+        }
+
+    # ==========================================
+    # LABORATORIO DE INNOVACIÓN
+    # ==========================================
+
+    def _lab(self, funcion, *args, **kwargs):
+        """Llama al laboratorio y convierte sus errores en rechazos."""
+        try:
+            return funcion(*args, **kwargs)
+        except ErrorLaboratorio as error:
+            raise Rechazo(str(error)) from error
+
+    def _experimentos(self, proyecto, capacidad=None):
+        """Los experimentos que ELEUTHIA tiene de este proyecto (si ELEUTHIA está)."""
+        if self.gaia is None or "eleuthia" not in self.gaia.inteligencias:
+            return []
+        r = self.gaia.pedir(self.nombre, "eleuthia", "experimentos", proyecto=proyecto, capacidad=capacidad)
+        return r["datos"]["experimentos"] if r["estado"] == OK else []
+
+    def proyectos(self, datos):
+        return {"proyectos": self.laboratorio.resumen()}
+
+    def crear_proyecto(self, datos):
+        p = self._lab(self.laboratorio.crear_proyecto, datos.get("nombre"), datos.get("meta"))
+        return {"nombre": p["nombre"], "meta": p["meta"]}
+
+    def ver_proyecto(self, datos):
+        arbol = self._lab(self.laboratorio.arbol, datos.get("nombre"))
+        sugerida = self._siguiente(arbol["nombre"])
+        return {**arbol, "siguiente": sugerida}
+
+    def agregar_capacidad(self, datos):
+        estado = datos.get("estado") or "falta"
+        return self._lab(
+            self.laboratorio.agregar, datos.get("proyecto"), datos.get("nombre"),
+            datos.get("padre"), estado, datos.get("notas", ""),
+        )
+
+    def marcar(self, datos):
+        return self._lab(
+            self.laboratorio.marcar, datos.get("proyecto"), datos.get("capacidad"),
+            datos.get("estado"), datos.get("notas"),
+        )
+
+    def quitar_capacidad(self, datos):
+        return {"quitadas": self._lab(self.laboratorio.quitar, datos.get("proyecto"), datos.get("capacidad"))}
+
+    def estrategias(self, datos):
+        proyecto = self._lab(self.laboratorio.proyecto, datos.get("proyecto"))["nombre"]
+        numero = datos.get("capacidad")
+        experimentos = self._experimentos(proyecto, numero)
+        return self._lab(self.laboratorio.estrategias, proyecto, numero, experimentos)
+
+    def _siguiente(self, proyecto):
+        fallos = {}
+        for e in self._experimentos(proyecto):
+            if e.get("resultado") == "falló" and e.get("capacidad") is not None:
+                fallos[e["capacidad"]] = fallos.get(e["capacidad"], 0) + 1
+        return self._lab(self.laboratorio.siguiente, proyecto, fallos)
+
+    def siguiente(self, datos):
+        proyecto = self._lab(self.laboratorio.proyecto, datos.get("proyecto"))["nombre"]
+        return {"siguiente": self._siguiente(proyecto)}
+
+    def cargar_focus(self, datos):
+        """Crea el proyecto FOCUS con el mapa de dónde va el ecosistema."""
+        p = self._lab(cargar_plantilla_focus, self.laboratorio)
+        return {"nombre": p["nombre"], "capacidades": len(p["capacidades"])}
 
     def planear(self, datos):
         tarea = datos.get("tarea")

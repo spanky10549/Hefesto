@@ -801,6 +801,178 @@ def mostrar_listas_web():
     print(f"  ⛔ Bloqueados: {', '.join(r['bloqueados']) or '(ninguno)'}")
 
 
+# ==========================================
+# LABORATORIO DE INNOVACIÓN (MINERVA)
+# ==========================================
+
+ICONOS_CAPACIDAD = {"existe": "✅", "a_medias": "🟡", "falta": "❌"}
+
+ESTADOS_ESCRITOS = {
+    "existe": "existe", "listo": "existe", "lista": "existe", "hecho": "existe", "hecha": "existe",
+    "a medias": "a_medias", "a_medias": "a_medias", "medias": "a_medias",
+    "falta": "falta", "pendiente": "falta",
+}
+
+# El proyecto abierto: así no hay que repetir su nombre en cada comando.
+proyecto_abierto = None
+
+
+def barra(porcentaje, ancho=20):
+    llenos = round(ancho * porcentaje / 100)
+    return "█" * llenos + "░" * (ancho - llenos)
+
+
+def mostrar_proyecto(nombre):
+    global proyecto_abierto
+    r = pedir("minerva", "proyecto", nombre=nombre)
+    if r is None:
+        return
+    proyecto_abierto = r["nombre"]
+
+    print(f"HEFESTO: 🧪 {r['nombre']}: {r['meta']}")
+    print(f"  Avance: {barra(r['avance'])} {r['avance']} %")
+
+    if not r["capacidades"]:
+        print("  Todavía no tiene capacidades. Agrega una: agrega <nombre>")
+        return
+
+    for c in r["capacidades"]:
+        sangria = "   " * c["nivel"]
+        extra = "" if c["es_hoja"] else f"  ({c['avance']} %)"
+        print(f"  {sangria}{ICONOS_CAPACIDAD[c['estado']]} #{c['id']} {c['nombre']}{extra}")
+        if c["notas"]:
+            print(f"  {sangria}      {c['notas']}")
+
+    if r["siguiente"]:
+        s = r["siguiente"]
+        print(f"  👉 Siguiente sugerido: #{s['id']} {s['nombre']}   (ideas: estrategias {s['id']})")
+    else:
+        print("  🎉 ¡Todas las capacidades existen!")
+
+
+def proyecto_actual():
+    if proyecto_abierto is None:
+        print("HEFESTO: Primero abre un proyecto: proyecto <nombre>  (o escribe 'proyectos')")
+    return proyecto_abierto
+
+
+def mostrar_proyectos():
+    r = pedir("minerva", "proyectos")
+    if r is None:
+        return
+    if not r["proyectos"]:
+        print("HEFESTO: No hay proyectos en el laboratorio. Para empezar con el de FOCUS: carga el proyecto focus")
+        return
+    print("HEFESTO: Proyectos del laboratorio:")
+    for p in r["proyectos"]:
+        print(f"  🧪 {p['nombre']}  {barra(p['avance'], 10)} {p['avance']} %  — {p['meta']}")
+
+
+def nuevo_proyecto(nombre):
+    try:
+        meta = input("  ¿Cuál es la meta? ").strip()
+    except (KeyboardInterrupt, EOFError):
+        return
+    if pedir("minerva", "crear_proyecto", nombre=nombre, meta=meta) is not None:
+        mostrar_proyecto(nombre)
+
+
+def cargar_proyecto_focus():
+    if pedir("minerva", "cargar_focus") is not None:
+        print("HEFESTO: Cargué el mapa de FOCUS en el laboratorio.")
+    mostrar_proyecto("FOCUS")
+
+
+def agregar_capacidad(texto):
+    proyecto = proyecto_actual()
+    if proyecto is None:
+        return
+    padre = None
+    partes = re.split(r"\s+dentro de\s+#?(\d+)\s*$", texto.strip())
+    if len(partes) > 1:
+        texto, padre = partes[0], int(partes[1])
+    r = pedir("minerva", "agregar_capacidad", proyecto=proyecto, nombre=texto, padre=padre)
+    if r is not None:
+        print(f"HEFESTO: Agregué #{r['id']} {r['nombre']} (❌ falta).")
+
+
+def marcar_capacidad(numero, estado_escrito, notas=None):
+    proyecto = proyecto_actual()
+    if proyecto is None:
+        return
+    estado = ESTADOS_ESCRITOS.get(estado_escrito.strip().lower())
+    if estado is None:
+        print("HEFESTO: El estado puede ser: existe, a medias o falta.")
+        return
+    r = pedir("minerva", "marcar", proyecto=proyecto, capacidad=numero, estado=estado, notas=notas)
+    if r is None:
+        return
+    print(f"HEFESTO: #{r['id']} {r['nombre']} → {ICONOS_CAPACIDAD[r['estado']]}")
+    p = pedir("minerva", "proyecto", nombre=proyecto)
+    if p is not None:
+        print(f"  Avance de {p['nombre']}: {barra(p['avance'])} {p['avance']} %")
+
+
+def quitar_capacidad(numero):
+    proyecto = proyecto_actual()
+    if proyecto is None:
+        return
+    r = pedir("minerva", "quitar_capacidad", proyecto=proyecto, capacidad=numero)
+    if r is not None:
+        print(f"HEFESTO: Quité {contar(len(r['quitadas']), 'capacidad', 'capacidades')}.")
+
+
+def mostrar_estrategias(numero):
+    proyecto = proyecto_actual()
+    if proyecto is None:
+        return
+    r = pedir("minerva", "estrategias", proyecto=proyecto, capacidad=numero)
+    if r is None:
+        return
+    c = r["capacidad"]
+    print(f"HEFESTO: Ideas de MINERVA para #{c['id']} {c['nombre']} ({ICONOS_CAPACIDAD[r['estado']]}):")
+    for idea in r["ideas"]:
+        print(f"  • {idea['estrategia'].capitalize()}: {idea['idea']}")
+    print(f"  Cuando lo intentes: experimento en {c['id']}")
+
+
+def experimento_en(numero):
+    """Un experimento ligado a una capacidad del proyecto abierto."""
+    proyecto = proyecto_actual()
+    if proyecto is None:
+        return
+    try:
+        intento = input("  ¿Qué intentaste? ").strip()
+        resultado = input("  ¿Cómo salió? (funcionó / falló / a medias): ").strip().lower()
+        aprendizaje = input("  ¿Qué aprendiste? (Enter para saltar): ").strip()
+    except (KeyboardInterrupt, EOFError):
+        return
+
+    resultado = {"funciono": "funcionó", "fallo": "falló", "a medias": "a medias"}.get(
+        quitar_acentos(resultado), resultado
+    )
+    r = pedir("eleuthia", "experimento", proyecto=proyecto, capacidad=numero, intento=intento,
+              resultado=resultado, aprendizaje=aprendizaje)
+    if r is None:
+        return
+    print("HEFESTO: Experimento guardado.")
+    if resultado == "funcionó":
+        print(f"  Si ya quedó, márcala: marca {numero} como existe")
+
+
+def mostrar_siguiente():
+    proyecto = proyecto_actual()
+    if proyecto is None:
+        return
+    r = pedir("minerva", "siguiente", proyecto=proyecto)
+    if r is None:
+        return
+    if r["siguiente"] is None:
+        print("HEFESTO: 🎉 No falta nada en este proyecto.")
+        return
+    mostrar_estrategias(r["siguiente"]["id"])
+
+
 def mostrar_seguridad():
     r = pedir("poseidon", "reporte")
     if r is None:
@@ -2131,6 +2303,17 @@ HEFESTO: Esto es lo que sé hacer:
     mapa                    el mapa compartido con lo que descubrió el rover
     simula <sensor> <valor> fuerza una lectura de la estación simulada
 
+  LABORATORIO DE INNOVACIÓN (MINERVA)
+    proyectos               los proyectos y su avance
+    carga el proyecto focus el mapa de FOCUS hacia los niveles 4 y 5
+    nuevo proyecto <nombre> / proyecto <nombre>     crear / abrir
+    agrega <capacidad> [dentro de <número>]
+    marca <número> como existe | a medias | falta
+    estrategias <número>    ideas para llenar ese hueco
+    experimento en <número> registra un intento en esa capacidad
+    qué sigue               la siguiente capacidad recomendada y sus ideas
+    quita la capacidad <número>
+
   PROTECCIÓN WEB (CUERNO ARADO)
     revisa <link o mensaje>  revisa links sin abrirlos (puedes pegar un SMS completo)
     confía en <sitio> / bloquea <sitio> / quita el sitio <sitio>
@@ -2468,6 +2651,48 @@ def iniciar_hefesto():
         elif comando_simple(comando) in ("mis sitios", "listas web", "sitios confiables"):
 
             mostrar_listas_web()
+
+        elif comando_simple(comando) in ("proyectos", "laboratorio", "mis proyectos"):
+
+            mostrar_proyectos()
+
+        elif comando_simple(comando) in ("carga el proyecto focus", "proyecto focus") and \
+                not ecosistema().pedir("hefesto", "minerva", "proyecto", nombre="FOCUS")["estado"] == OK:
+
+            cargar_proyecto_focus()
+
+        elif comando.strip().lower().startswith("nuevo proyecto "):
+
+            nuevo_proyecto(comando.strip()[len("nuevo proyecto "):].strip())
+
+        elif comando.strip().lower().startswith("proyecto "):
+
+            mostrar_proyecto(comando.strip()[len("proyecto "):].strip())
+
+        elif comando.strip().lower().startswith("agrega ") and not comando_normalizado.startswith("agrega que"):
+
+            agregar_capacidad(comando.strip()[len("agrega "):])
+
+        elif re.match(r"^marca #?(\d+) como (.+)$", comando.strip().lower()):
+
+            numero, estado = re.match(r"^marca #?(\d+) como (.+)$", comando.strip().lower()).groups()
+            marcar_capacidad(int(numero), estado)
+
+        elif re.match(r"^estrategias #?(\d+)$", comando_simple(comando)):
+
+            mostrar_estrategias(int(re.findall(r"\d+", comando)[0]))
+
+        elif re.match(r"^experimento en #?(\d+)$", comando_simple(comando)):
+
+            experimento_en(int(re.findall(r"\d+", comando)[0]))
+
+        elif re.match(r"^quita la capacidad #?(\d+)$", comando_simple(comando)):
+
+            quitar_capacidad(int(re.findall(r"\d+", comando)[0]))
+
+        elif comando_simple(comando) in ("siguiente paso", "que sigue", "que hago ahora"):
+
+            mostrar_siguiente()
 
         elif comando_simple(comando) in ("respalda", "haz un respaldo", "respaldar"):
 
