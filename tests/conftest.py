@@ -40,6 +40,12 @@ def archivos_temporales(tmp_path, monkeypatch):
     # ...ni las rutinas de MINERVA...
     import minerva.rutinas
     monkeypatch.setattr(minerva.rutinas, "ARCHIVO_RUTINAS", str(tmp_path / "minerva_rutinas.json"))
+    # ...ni tu perfil de la plática...
+    import conversacion.perfil
+    monkeypatch.setattr(conversacion.perfil, "ARCHIVO_PERFIL", str(tmp_path / "conversacion_perfil.json"))
+    # ...ni la clave del creador...
+    import conversacion.creador
+    monkeypatch.setattr(conversacion.creador, "ARCHIVO_CREADOR", str(tmp_path / "focus_creador.json"))
     # ...ni la clave secreta de POSEIDON en la carpeta real.
     monkeypatch.setattr(
         poseidon.firma, "ARCHIVO_CLAVE", str(tmp_path / "poseidon_clave.txt")

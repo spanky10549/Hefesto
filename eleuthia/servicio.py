@@ -61,6 +61,7 @@ EVENTOS = {
         f"DEMETER negó a {d['inteligencia'].upper()} {d['operacion']} en {d['zona']}"
     ),
     "enlace_peligroso": lambda d: f"CUERNO ARADO detectó un enlace peligroso: {d['dominio']} ({d.get('razon')})",
+    "clave_incorrecta": lambda d: f"alguien dijo ser el creador pero la clave no coincidió (intento {d['intentos']})",
     "recursos_bajos": lambda d: "recursos bajos: " + "; ".join(a["texto"] for a in d["alertas"]),
 }
 

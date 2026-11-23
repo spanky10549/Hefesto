@@ -162,14 +162,14 @@
                 "id": 23,
                 "nombre": "usar el resultado de otro paso",
                 "padre": 8,
-                "estado": "falta",
+                "estado": "existe",
                 "notas": ""
             },
             {
                 "id": 24,
                 "nombre": "condiciones y plan B",
                 "padre": 8,
-                "estado": "falta",
+                "estado": "existe",
                 "notas": ""
             }
         ],

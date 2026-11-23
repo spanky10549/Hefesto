@@ -44,7 +44,7 @@ from apollo.lector import leer_archivo, guardar_hechos
 from calculo.aritmetica import extraer_operacion
 from apollo.lenguaje import quitar_acentos, quitar_signos
 from gaia import crear_ecosistema, OK, RECHAZADO
-from gaia.tareas import ejecutar_plan, OMITIDO, PENDIENTE
+from gaia.tareas import ejecutar_plan, OMITIDO, PENDIENTE, SALTADO
 from gaia.mensajes import crear_orden, crear_evento
 from gaia.red import InteligenciaRemota
 from eleuthia.respaldos import aplicar_restauracion_pendiente, ArchivoOcupado
@@ -246,6 +246,14 @@ def mostrar_plan(plan):
 
     for paso in plan["pasos"]:
         linea = f"  {paso['numero']}. {paso['descripcion']}  → {paso['para'].upper()}"
+        if paso.get("guardar_como"):
+            linea += f"  (se guarda como {paso['guardar_como']})"
+        if paso.get("condicion"):
+            linea += f"  [solo si {paso['condicion']['texto']}]"
+        if paso.get("alternativa"):
+            linea += f"  [si falla: {paso['alternativa']['descripcion']}]"
+        elif paso.get("si_falla") == "detener":
+            linea += "  [si falla: me detengo]"
         if paso["aviso"]:
             linea += f"  ⚠ {paso['aviso']}"
         print(linea)
@@ -277,12 +285,31 @@ def mostrar_paso(resultado):
     if resultado["estado"] == OK:
         texto = resumir(resultado["para"], resultado["accion"], resultado["datos"])
         print(f"  {numero}. [{quien}] {texto}")
+        if resultado.get("guardado"):
+            g = resultado["guardado"]
+            print(f"       → guardé {g['nombre']} = {g['valor']}")
+        elif resultado.get("detalle"):
+            print(f"       ({resultado['detalle']})")
+    elif resultado["estado"] == SALTADO:
+        print(f"  {numero}. [{quien}] Lo salté: {resultado['detalle']}.")
     elif resultado["estado"] == OMITIDO:
         print(f"  {numero}. [{quien}] Lo salté: {resultado['detalle']}.")
     elif resultado["estado"] == PENDIENTE:
         print(f"  {numero}. [{quien}] No se hizo porque un paso anterior falló.")
     else:
         print(f"  {numero}. [{quien}] No se pudo: {resultado['detalle']}")
+
+    # Plan B
+    if resultado.get("plan_b"):
+        b = resultado["plan_b"]
+        quien_b = b["para"].upper()
+        if b["estado"] == OK:
+            texto = resumir(b["para"], b["accion"], b["datos"])
+            print(f"       → plan B: [{quien_b}] {texto}")
+            if b.get("guardado"):
+                print(f"       → guardé {b['guardado']['nombre']} = {b['guardado']['valor']}")
+        else:
+            print(f"       → el plan B tampoco funcionó: {b['detalle']}")
 
 
 def encargarse_de(tarea):
@@ -2391,6 +2418,11 @@ HEFESTO: Esto es lo que sé hacer:
     planea <tarea>          muestra los pasos sin hacerlos
     encárgate de <tarea>    hace la tarea completa
         encárgate de investigar qué es un ave, calcular 2^10 y revisar los recursos
+    Dentro de una tarea o rutina también puedes usar:
+        ... y guárdalo como <nombre>      el resultado + 1      define eso
+        si <algo> es mayor que / menor que / igual a <algo>, <paso>
+        si la ram está arriba de 90, ...   si hay errores ...   si no hay incidentes ...
+        <paso> y si falla <otro paso>      si falla, detente
     recupera <inteligencia> HADES intenta reiniciarla y liberarla
     estado, quién eres, ayuda, salir
 

@@ -23,10 +23,27 @@ from datetime import datetime
 
 from memoria.almacenamiento import cargar_json, guardar_json
 
-from minerva.planeador import dividir_tarea, interpretar, nombre_de_rutina
+from minerva.planeador import dividir_tarea, interpretar, nombre_de_rutina, procesar
+from minerva.condiciones import partir_plan_b, es_plan_b, es_detenerse, separar_condicion
 
 
 ARCHIVO_RUTINAS = "minerva_rutinas.json"
+
+
+def acciones_de(pasos, nombres=()):
+    """
+    Lo que cada paso manda a hacer, sin su condición ni su "si falla":
+        ["si hay errores revisa los incidentes", "define X y si falla calcula Y"]
+        → ["revisa los incidentes", "define X", "calcula Y"]
+    """
+    acciones = []
+    for paso in pasos:
+        for parte in partir_plan_b(paso):
+            alternativa = es_plan_b(parte)
+            resto = alternativa if alternativa is not None else separar_condicion(parte, nombres)[1]
+            if resto.strip() and not es_detenerse(resto):
+                acciones.append(resto)
+    return acciones
 
 
 class ErrorRutina(Exception):
@@ -43,6 +60,9 @@ class Rutinas:
     def _guardar(self):
         guardar_json(self.ruta, self.rutinas)
 
+    def _nombres(self):
+        return [r["nombre"] for r in self.rutinas.values()]
+
     def todas(self):
         """{nombre para comparar: {"nombre", "pasos", "creada"}}"""
         return self.rutinas
@@ -54,8 +74,8 @@ class Rutinas:
         if nombre in visitadas or nombre not in self.rutinas:
             return False
         return any(
-            self._usa(nombre_de_rutina(paso), buscada, visitadas + (nombre,))
-            for paso in self.rutinas[nombre]["pasos"]
+            self._usa(nombre_de_rutina(accion), buscada, visitadas + (nombre,))
+            for accion in acciones_de(self.rutinas[nombre]["pasos"], self._nombres())
         )
 
     def ensenar(self, nombre, texto_pasos):
@@ -70,16 +90,18 @@ class Rutinas:
         if not pasos:
             raise ErrorRutina("la rutina necesita al menos un paso")
 
-        no_entendidos = []
-        for paso in pasos:
-            otra = nombre_de_rutina(paso)
-            if otra in self.rutinas or otra == clave:
-                if self._usa(otra, clave):
-                    raise ErrorRutina(
-                        f"\"{paso}\" haría un círculo: esa rutina terminaría llamándose a sí misma"
-                    )
-            elif interpretar(paso) is None:
-                no_entendidos.append(paso)
+        nombres = self._nombres() + [nombre]
+        for accion in acciones_de(pasos, nombres):
+            otra = nombre_de_rutina(accion)
+            if (otra in self.rutinas or otra == clave) and self._usa(otra, clave):
+                raise ErrorRutina(
+                    f"\"{accion}\" haría un círculo: esa rutina terminaría llamándose a sí misma"
+                )
+
+        # Para revisar, se incluye la rutina nueva como si ya existiera (vacía):
+        # así "si hay errores <ella misma>" no se lee como parte de la condición.
+        provisional = {**self.rutinas, clave: {"nombre": nombre, "pasos": []}}
+        no_entendidos = [d for d, paso in procesar(pasos, provisional) if paso is None]
 
         if no_entendidos:
             raise ErrorRutina("no entendí estos pasos: " + "; ".join(f"\"{p}\"" for p in no_entendidos))

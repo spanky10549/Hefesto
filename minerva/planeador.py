@@ -149,11 +149,38 @@ PREFIJOS_CALCULAR = (
 VERBOS_REVISAR = ("revisa", "revisar", "checa", "checar", "mide", "medir")
 
 
+# "... y guárdalo como piezas" / "..., guárdalo como 'piezas'"
+_GUARDAR = re.compile(
+    r"[\s,]+(?:y\s+)?gu[aá]rd(?:a|alo|ala|ar)\s+(?:el resultado\s+)?como\s+[\"'«]?([a-zñáéíóúü_][\wñáéíóúü ]*?)[\"'»]?\s*$",
+    re.IGNORECASE,
+)
+
+
+def separar_guardado(parte):
+    """
+    'calcula 5 × 35 y guárdalo como piezas' → ('calcula 5 × 35', 'piezas')
+    'calcula 5 × 35'                        → ('calcula 5 × 35', None)
+    """
+    encontrado = _GUARDAR.search(parte)
+    if not encontrado:
+        return parte, None
+    return parte[:encontrado.start()], " ".join(encontrado.group(1).lower().split())
+
+
 def interpretar(parte):
     """
     Una parte de la tarea → un paso, o None si no la entiende.
         {"para": "apollo", "accion": "definir", "datos": {"concepto": "..."}}
+    Si termina con "guárdalo como X", el paso lleva "guardar_como": "x".
     """
+    parte, guardar_como = separar_guardado(parte.strip(SOBRANTES))
+    paso = _interpretar(parte)
+    if paso is not None and guardar_como:
+        paso["guardar_como"] = guardar_como
+    return paso
+
+
+def _interpretar(parte):
     parte = parte.strip(SOBRANTES)
     parte_simple = simple(parte)
 
@@ -227,13 +254,80 @@ def expandir(parte, rutinas, camino=()):
         if nombre in camino or len(camino) >= MAX_PROFUNDIDAD:
             return [(parte, None)]
         resultado = []
-        for subparte in rutinas[nombre]["pasos"]:
-            for descripcion, paso in expandir(subparte, rutinas, camino + (nombre,)):
-                # "[checa todo] revisa los recursos": se nota de qué rutina vino
-                resultado.append((f"[{rutinas[nombre]['nombre']}] {descripcion}", paso))
+        for descripcion, paso in procesar(rutinas[nombre]["pasos"], rutinas, camino + (nombre,)):
+            # "[checa todo] revisa los recursos": se nota de qué rutina vino
+            resultado.append((f"[{rutinas[nombre]['nombre']}] {descripcion}", paso))
         return resultado
 
     return [(parte, interpretar(parte))]
+
+
+def procesar(partes, rutinas, camino=()):
+    """
+    Las partes de una tarea (o de una rutina) → [(descripción, paso o None)].
+
+    Además de los pasos normales entiende:
+        "si piezas > 100, calcula X"   condición para el paso que sigue
+        "calcula X si piezas > 100"    condición al final
+        "define X y si falla calcula Y" plan B del paso anterior
+        "si falla, detente"             si falla el anterior, no seguir
+    """
+    # Se importa aquí porque condiciones.py también usa este archivo.
+    from minerva.condiciones import partir_plan_b, es_plan_b, es_detenerse, separar_condicion
+
+    salida = []
+    pendiente = None      # condición escrita sola: "si piezas > 100," aplica a lo que sigue
+    plan_b_pendiente = False   # "si falla," solo: lo que sigue es el plan B
+
+    for parte_completa in partes:
+        for parte in partir_plan_b(parte_completa):
+
+            alternativa = es_plan_b(parte)
+
+            # "..., si falla, detente": la coma separó "si falla" de lo que sigue
+            if alternativa == "":
+                plan_b_pendiente = True
+                continue
+            if plan_b_pendiente:
+                plan_b_pendiente = False
+                alternativa = parte.strip(" ,.")
+
+            if alternativa is not None:
+                anteriores = [paso for _, paso in salida if paso is not None]
+                if not anteriores:
+                    salida.append((parte, None))
+                elif es_detenerse(alternativa):
+                    anteriores[-1]["si_falla"] = "detener"
+                else:
+                    paso_b = interpretar(alternativa)
+                    if paso_b is None:
+                        salida.append((parte, None))
+                    else:
+                        anteriores[-1]["si_falla"] = "plan b"
+                        anteriores[-1]["alternativa"] = {**paso_b, "descripcion": alternativa}
+                continue
+
+            condicion, resto = separar_condicion(parte, [r["nombre"] for r in rutinas.values()])
+            if condicion and not resto.strip():
+                pendiente = condicion
+                continue
+
+            condicion = condicion or pendiente
+            pendiente = None
+
+            for descripcion, paso in expandir(resto, rutinas, camino):
+                if paso is not None:
+                    paso.setdefault("si_falla", "continuar")
+                    if condicion:
+                        paso["condicion"] = condicion
+                salida.append((descripcion, paso))
+
+    if pendiente:
+        salida.append((f"si {pendiente['texto']}", None))   # una condición sin nada después
+    if plan_b_pendiente:
+        salida.append(("si falla", None))                    # "si falla" sin nada después
+
+    return salida
 
 
 def planear(tarea, rutinas=None):
@@ -244,18 +338,10 @@ def planear(tarea, rutinas=None):
     rutinas = rutinas or {}
     pasos, no_entendidos = [], []
 
-    for parte in dividir_tarea(tarea):
-        for descripcion, paso in expandir(parte, rutinas):
-
-            if paso is None:
-                no_entendidos.append(descripcion)
-                continue
-
-            pasos.append({
-                "numero": len(pasos) + 1,
-                "descripcion": descripcion,
-                **paso,
-                "si_falla": "continuar",
-            })
+    for descripcion, paso in procesar(dividir_tarea(tarea), rutinas):
+        if paso is None:
+            no_entendidos.append(descripcion)
+            continue
+        pasos.append({"numero": len(pasos) + 1, "descripcion": descripcion, **paso})
 
     return {"tarea": tarea, "pasos": pasos, "no_entendidos": no_entendidos}

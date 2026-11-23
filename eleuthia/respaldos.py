@@ -46,6 +46,8 @@ ARCHIVOS = [
     "eleuthia_bitacora.jsonl",     # la bitácora y los experimentos
     "laboratorio.json",            # los proyectos del laboratorio de innovación
     "minerva_rutinas.json",        # las rutinas que le enseñaste a MINERVA
+    "conversacion_perfil.json",    # lo que FOCUS recuerda de ti al platicar
+    "focus_creador.json",          # el hash de la clave del creador (nunca la clave)
     "cuerno_arado_listas.json",    # tus sitios confiables y bloqueados
 ]
 
