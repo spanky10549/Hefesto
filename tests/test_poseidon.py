@@ -66,8 +66,20 @@ def test_mensaje_bueno_pasa_y_sale_sin_firma():
 
 
 def test_firma_falsa():
+    # Sin cifrado, para probar solo la firma
     with pytest.raises(MensajeSospechoso, match="firma"):
-        Guardia(CLAVE).revisar(firmar(crear_orden("a", "b", "c"), "clave-del-intruso"))
+        Guardia(CLAVE, cifrar=False).revisar(firmar(crear_orden("a", "b", "c"), "clave-del-intruso"))
+
+
+def test_mensaje_sin_cifrar_se_rechaza():
+    with pytest.raises(MensajeSospechoso, match="sin cifrar"):
+        Guardia(CLAVE).revisar(firmar(crear_orden("a", "b", "c"), CLAVE))
+
+
+def test_sobre_de_otra_clave():
+    intruso = Guardia("clave-del-intruso")
+    with pytest.raises(MensajeSospechoso, match="no se pudo abrir"):
+        Guardia(CLAVE).revisar(intruso.sellar(crear_orden("a", "b", "c")))
 
 
 def test_mensaje_repetido():

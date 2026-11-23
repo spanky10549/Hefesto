@@ -1,0 +1,10 @@
+{
+    "revision": {
+        "nombre": "revision",
+        "pasos": [
+            "revisa los recursos",
+            "revisa el entorno"
+        ],
+        "creada": "2026-11-23T13:58:11"
+    }
+}
