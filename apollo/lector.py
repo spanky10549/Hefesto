@@ -23,6 +23,7 @@ from apollo.conocimiento import (
     aprender_sinonimo,
     aprender_relacion
 )
+from apollo.fuentes import USUARIO
 
 from apollo.lenguaje import limpiar_concepto, normalizar_texto, PREPOSICIONES
 
@@ -220,10 +221,13 @@ def leer_archivo(ruta):
 # GUARDAR LO LEÍDO
 # ==========================================
 
-def guardar_hechos(hechos):
+def guardar_hechos(hechos, fuente=USUARIO):
     """
     Aprende una lista de hechos. Las contradicciones NO se guardan:
     se devuelven para que alguien decida.
+
+    'fuente' queda anotada en cada hecho: documento("aves.txt") si
+    salieron de un archivo (ver apollo/fuentes.py).
 
     Devuelve una lista de (hecho, resultado de APOLLO).
     """
@@ -236,21 +240,21 @@ def guardar_hechos(hechos):
     for hecho in sorted(hechos, key=lambda h: orden[h["tipo"]]):
 
         if hecho["tipo"] == "categoria":
-            r = aprender_palabra(hecho["sujeto"], hecho["objeto"])
+            r = aprender_palabra(hecho["sujeto"], hecho["objeto"], fuente=fuente)
 
         elif hecho["tipo"] == "sinonimo":
-            r = aprender_sinonimo(hecho["sujeto"], hecho["objeto"])
+            r = aprender_sinonimo(hecho["sujeto"], hecho["objeto"], fuente=fuente)
 
             # "RPi es sinónimo de Raspberry Pi": el conocido va al final.
             if r["estado"] == "desconocido":
-                otro = aprender_sinonimo(hecho["objeto"], hecho["sujeto"])
+                otro = aprender_sinonimo(hecho["objeto"], hecho["sujeto"], fuente=fuente)
                 if otro["estado"] != "desconocido":
                     r = otro
 
         else:
             r = aprender_relacion(
                 hecho["sujeto"], hecho["relacion"],
-                hecho["objeto"], hecho["negada"]
+                hecho["objeto"], hecho["negada"], fuente=fuente
             )
 
         resultados.append((hecho, r))

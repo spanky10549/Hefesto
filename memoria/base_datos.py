@@ -12,6 +12,13 @@ El diccionario se guarda en cuatro tablas:
     relaciones     concepto_id | relacion | objetivo | objetivo_normalizado
                    | negada | orden
 
+Y una quinta, aparte, que dice de dónde salió cada cosa:
+
+    fuentes        sujeto | tipo | objeto | negada | fuente | fecha
+
+"fuentes" no cuelga de los conceptos a propósito: aunque el diccionario
+completo se reescriba (ordenar, importar), las fuentes no se pierden.
+
 "orden" conserva el orden en que se aprendieron las cosas.
 Las columnas "normalizado" guardan la forma de comparar ("Las Baterías"
 → "bateria"), para poder buscar directo con SQL.
@@ -27,7 +34,7 @@ import sqlite3
 from memoria.almacenamiento import ErrorAlmacenamiento
 
 
-VERSION_ESQUEMA = 2
+VERSION_ESQUEMA = 3     # 3: se agregó la tabla "fuentes"
 
 ESQUEMA = """
 CREATE TABLE IF NOT EXISTS conceptos (
@@ -70,6 +77,23 @@ CREATE INDEX IF NOT EXISTS idx_relaciones_concepto ON relaciones(concepto_id);
 CREATE INDEX IF NOT EXISTS idx_relaciones_objetivo ON relaciones(objetivo_normalizado);
 """
 
+# De dónde salió cada dato. Todo va normalizado ("Las Aves" → "ave"),
+# igual que las columnas "normalizado" de las otras tablas.
+#   tipo:   "es" (categoría), "sinonimo", o la relación ("mide", "puede"...)
+#   fuente: "usuario", "creador:spanky", "documento:aves.txt", "wordnet"
+#   fecha:  "2026-11-24"
+ESQUEMA_FUENTES = """
+CREATE TABLE IF NOT EXISTS fuentes (
+    sujeto  TEXT NOT NULL,
+    tipo    TEXT NOT NULL,
+    objeto  TEXT NOT NULL,
+    negada  INTEGER NOT NULL DEFAULT 0,
+    fuente  TEXT NOT NULL,
+    fecha   TEXT NOT NULL,
+    PRIMARY KEY (sujeto, tipo, objeto, negada)
+);
+"""
+
 
 def conectar(ruta):
     """Abre la base de datos."""
@@ -103,15 +127,21 @@ def preparar_base(ruta, normalizar):
         if version >= VERSION_ESQUEMA:
             return
 
-        diccionario = _leer_todo(conexion) if hay_tablas else {"palabras": []}
+        # Versión 1 (o nueva): se reconstruyen las cuatro tablas.
+        if version < 2:
+            diccionario = _leer_todo(conexion) if hay_tablas else {"palabras": []}
 
-        with conexion:
-            for tabla in ("relaciones", "sinonimos", "asociaciones", "conceptos"):
-                conexion.execute(f"DROP TABLE IF EXISTS {tabla}")
+            with conexion:
+                for tabla in ("relaciones", "sinonimos", "asociaciones", "conceptos"):
+                    conexion.execute(f"DROP TABLE IF EXISTS {tabla}")
 
-            conexion.executescript(ESQUEMA)
+                conexion.executescript(ESQUEMA)
 
-        _escribir_todo(conexion, diccionario, normalizar)
+            _escribir_todo(conexion, diccionario, normalizar)
+
+        # Versión 2 → 3: solo falta la tabla de fuentes. Lo que ya sabía
+        # se queda sin fuente ("lo aprendí antes de anotarlo").
+        conexion.executescript(ESQUEMA_FUENTES)
         conexion.execute(f"PRAGMA user_version = {VERSION_ESQUEMA}")
 
     except sqlite3.Error as error:
@@ -508,5 +538,39 @@ def contar_menciones_sql(ruta, clave):
         return conexion.execute(
             "SELECT COUNT(*) FROM relaciones WHERE objetivo_normalizado = ?", (clave,)
         ).fetchone()[0]
+
+    return _con_conexion(ruta, accion, "No pude consultar la base de datos")
+
+
+# ==========================================
+# FUENTES (de dónde salió cada dato)
+# ==========================================
+
+def anotar_fuentes_sql(ruta, filas):
+    """
+    Anota de dónde salió cada dato. filas = [(sujeto, tipo, objeto, negada, fuente, fecha), ...]
+    con sujeto, tipo y objeto ya normalizados.
+
+    "OR REPLACE": si ya había una fuente para ese mismo dato (por ejemplo,
+    lo olvidaste y te lo volví a aprender), gana la nueva.
+    """
+    filas = [(s, t, o, 1 if n else 0, f, d) for s, t, o, n, f, d in filas]
+
+    def accion(conexion):
+        with conexion:
+            conexion.executemany(
+                "INSERT OR REPLACE INTO fuentes VALUES (?, ?, ?, ?, ?, ?)", filas
+            )
+
+    _con_conexion(ruta, accion, "No pude guardar en la base de datos")
+
+
+def fuente_sql(ruta, sujeto, tipo, objeto, negada=False):
+    """(fuente, fecha) de un dato, o None si no se anotó."""
+    def accion(conexion):
+        return conexion.execute(
+            "SELECT fuente, fecha FROM fuentes WHERE sujeto = ? AND tipo = ? AND objeto = ? AND negada = ?",
+            (sujeto, tipo, objeto, 1 if negada else 0)
+        ).fetchone()
 
     return _con_conexion(ruta, accion, "No pude consultar la base de datos")

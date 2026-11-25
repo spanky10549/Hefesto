@@ -74,6 +74,16 @@ FRASES = {
         "Va, voy con eso.",
         "Dame un momento…",
     ],
+    "risa": [
+        "Jaja, me alegra que te haya gustado.",
+        "Jeje. Me gusta cuando te ríes.",
+        "Jaja. Aquí andamos.",
+    ],
+    "acuerdo": [
+        "Va.",
+        "Perfecto. ¿Algo más?",
+        "Sale. Aquí sigo.",
+    ],
     "bien": [
         "Me siento en calma",
         "Todo fluye tranquilo",
@@ -89,7 +99,8 @@ FRASES = {
 QUIEN_SOY = (
     "Soy {nombre_ia}, la inteligencia con la que platicas dentro de FOCUS. Me está creando spanky, desde cero. "
     "No trabajo sola: GAIA coordina a las demás, APOLLO guarda lo que sé, MINERVA planea, "
-    "ÉTER siente el entorno, y TABRIS, HADES y POSEIDON son el sistema de proteccion del entorno y de tu dispositivo local xD. "
+    "ÉTER siente el entorno, y TABRIS, HADES y POSEIDON nos cuidan. "
+    "Me gusta aprender; si algo no lo sé, pregúntame y lo aprendemos juntos."
 )
 
 QUE_PUEDO_HACER = [
@@ -99,6 +110,12 @@ QUE_PUEDO_HACER = [
     "Decirte cómo está la compu y el entorno (\"¿cómo andas?\")",
     "Revisar links sospechosos (\"revisa https://...\")",
     "Recordarte (\"me llamo Juan\", \"me gusta Horizon\")",
+    "Mover el rover (\"conecta el rover\", \"manda el rover a 3, 4\", \"¿dónde anda el rover?\")",
+    "Sensores y entorno (\"¿qué sensores tengo?\", \"activa el micrófono\", \"muéstrame el mapa\")",
+    "El laboratorio (\"¿qué proyectos tengo?\", \"¿qué sigue?\", \"marca la 8 como terminada\")",
+    "Respaldos y bitácora (\"haz un respaldo\", \"anota en la bitácora que…\")",
+    "Entender cómo escribes: abreviaciones y faltas (\"dnde ta el rober\"), varias cosas a la vez, \"otra vez\", y frases que me enseñes (\"cuando diga X, quiero decir Y\")",
+    "Y todos los comandos de HEFESTO tal cual (\"xor\", \"lee ejemplo.txt\", \"olvida que…\")",
 ]
 
 

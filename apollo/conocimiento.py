@@ -30,6 +30,9 @@ from memoria.base_datos import (
 
 from memoria.almacenamiento import cargar_json, ErrorAlmacenamiento
 
+from apollo import fuentes
+from apollo.fuentes import USUARIO
+
 from apollo.lenguaje import (
     normalizar_texto,
     quitar_acentos,
@@ -167,9 +170,10 @@ def resultado(estado, **datos):
 # APRENDER PALABRA
 # ==========================================
 
-def aprender_palabra(palabra, asociacion):
+def aprender_palabra(palabra, asociacion, fuente=USUARIO):
     """
     Aprende 'palabra es asociación' (por ejemplo, 'raspberry pi es una computadora').
+    'fuente' dice de dónde salió (ver apollo/fuentes.py).
 
     Estados posibles:
         "nueva"     aprendió una palabra que no conocía
@@ -202,16 +206,18 @@ def aprender_palabra(palabra, asociacion):
             return resultado("ya_sabia", **datos)
 
         agregar_texto_sql(base(), "asociaciones", concepto_id, asociacion, normalizar_concepto)
+        fuentes.anotar(base(), [(existentes[0][1], "es", asociacion, False)], fuente)
 
         return resultado("asociada", **datos)
 
     concepto_id = crear_concepto_sql(base(), palabra, normalizar_concepto)
     agregar_texto_sql(base(), "asociaciones", concepto_id, asociacion, normalizar_concepto)
+    fuentes.anotar(base(), [(palabra, "es", asociacion, False)], fuente)
 
     return resultado("nueva", **datos)
 
 
-def aprender_sinonimo(palabra, sinonimo):
+def aprender_sinonimo(palabra, sinonimo, fuente=USUARIO):
     """
     Aprende que 'sinonimo' es otro nombre de 'palabra'.
 
@@ -248,6 +254,7 @@ def aprender_sinonimo(palabra, sinonimo):
         return resultado("ya_registrado", **datos)
 
     agregar_texto_sql(base(), "sinonimos", concepto[0], sinonimo, normalizar_concepto)
+    fuentes.anotar(base(), [(concepto[1], "sinonimo", sinonimo, False)], fuente)
 
     return resultado("aprendido", palabra=concepto[1], sinonimo=sinonimo)
 
@@ -284,7 +291,7 @@ def es_negada(relacion):
     return isinstance(relacion, dict) and bool(relacion.get("negada", False))
 
 
-def aprender_relacion(sujeto, relacion, objeto, negada=False, reemplazar=False):
+def aprender_relacion(sujeto, relacion, objeto, negada=False, reemplazar=False, fuente=USUARIO):
     """
     Aprende 'sujeto relación objeto'.
     Con negada=True aprende lo contrario: 'sujeto NO relación objeto'.
@@ -387,6 +394,7 @@ def aprender_relacion(sujeto, relacion, objeto, negada=False, reemplazar=False):
 
     if concepto_id is None:
         concepto_id = crear_concepto_sql(base(), sujeto, normalizar_concepto)
+        concepto = (concepto_id, sujeto)
 
     # Borrar los conflictos (si se pidió reemplazar) y agregar la nueva,
     # todo en una sola transacción.
@@ -394,6 +402,7 @@ def aprender_relacion(sujeto, relacion, objeto, negada=False, reemplazar=False):
         base(), concepto_id, relacion, objeto, negada, normalizar_concepto,
         borrar_rowids=[rowid for rowid, _, _ in conflictos]
     )
+    fuentes.anotar(base(), [(concepto[1], relacion, objeto, negada)], fuente)
 
     return resultado("aprendida", reemplazadas=len(conflictos), **datos)
 
@@ -786,6 +795,21 @@ def olvidar_concepto(concepto):
 
     # ¿Quién más lo sigue mencionando?
     return nombre, contar_menciones_sql(base(), normalizar_concepto(nombre))
+
+
+# ==========================================
+# DE DÓNDE SALIÓ UN DATO
+# ==========================================
+
+def fuente_de(sujeto, tipo, objeto, negada=False):
+    """
+    {"fuente", "fecha"} de un dato que se aprendió directo, o None si
+    se aprendió antes de anotar fuentes. Si el sujeto es un sinónimo
+    ("rpi"), se busca con el nombre principal ("raspberry pi").
+    """
+    entrada = buscar_entrada(sujeto)
+    principal = entrada["palabra"] if entrada else sujeto
+    return fuentes.consultar(base(), principal, tipo, objeto, negada)
 
 
 # ==========================================

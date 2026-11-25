@@ -43,6 +43,11 @@ def archivos_temporales(tmp_path, monkeypatch):
     # ...ni tu perfil de la plática...
     import conversacion.perfil
     monkeypatch.setattr(conversacion.perfil, "ARCHIVO_PERFIL", str(tmp_path / "conversacion_perfil.json"))
+    # ...ni lo que sabe HEFESTO (la base de datos de APOLLO)
+    import apollo.conocimiento
+    monkeypatch.setattr(apollo.conocimiento, "ARCHIVO_DICCIONARIO", str(tmp_path / "diccionario_hefesto.json"))
+    import conversacion.frases
+    monkeypatch.setattr(conversacion.frases, "ARCHIVO_FRASES", str(tmp_path / "conversacion_frases.json"))
     # ...ni la clave del creador...
     import conversacion.creador
     monkeypatch.setattr(conversacion.creador, "ARCHIVO_CREADOR", str(tmp_path / "focus_creador.json"))
@@ -50,3 +55,24 @@ def archivos_temporales(tmp_path, monkeypatch):
     monkeypatch.setattr(
         poseidon.firma, "ARCHIVO_CLAVE", str(tmp_path / "poseidon_clave.txt")
     )
+
+
+class HefestoDePrueba:
+    """
+    Sustituye al puente con HEFESTO.py en las pruebas: el HEFESTO de
+    verdad carga su red neuronal y escribe memoria.json en la carpeta
+    real. Este solo anota qué le pasaron y dice que no entendió.
+    """
+
+    def __init__(self, gaia=None):
+        self.recibidos = []
+
+    def pasar(self, comando):
+        self.recibidos.append(comando)
+        return {"entendio": False, "salir": False, "lineas": []}
+
+
+@pytest.fixture(autouse=True)
+def sin_hefesto_real(monkeypatch):
+    import conversacion.platica
+    monkeypatch.setattr(conversacion.platica, "PuenteHefesto", HefestoDePrueba)

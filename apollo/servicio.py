@@ -8,7 +8,9 @@ archivo solo traduce "mensaje → función → diccionario".
 Acciones:
     definir            {"concepto"}                     → la definición en datos
     responder          {"sujeto", "relacion", "objeto"} → sí / no / no sé, con la cadena
-    aprender_relacion  {"sujeto", "relacion", "objeto", "negada"?, "reemplazar"?}
+                                                           (cada paso con su "fuente")
+    aprender_relacion  {"sujeto", "relacion", "objeto", "negada"?, "reemplazar"?, "fuente"?}
+    fuentes            {"concepto"}                     → lo que sabe de él y de dónde salió cada cosa
     existe             {"concepto"}                     → {"existe": True/False}
     sugerir            {"concepto"}                     → {"sugerencia": ... o None}
 """
@@ -17,8 +19,9 @@ from gaia.inteligencia import Inteligencia
 from gaia.mensajes import Rechazo
 
 from apollo.definicion import definir
-from apollo.razonamiento import responder
-from apollo.conocimiento import aprender_relacion, existe_concepto, sugerir_concepto
+from apollo.razonamiento import responder, con_fuentes, hechos_con_fuente
+from apollo.conocimiento import aprender_relacion, existe_concepto, sugerir_concepto, buscar_entrada
+from apollo.fuentes import USUARIO
 
 
 def _texto(datos, campo):
@@ -41,6 +44,7 @@ class Apollo(Inteligencia):
             "aprender_relacion": self.aprender_relacion,
             "existe": self.existe,
             "sugerir": self.sugerir,
+            "fuentes": self.fuentes,
         }
 
     def definir(self, datos):
@@ -52,7 +56,7 @@ class Apollo(Inteligencia):
             _texto(datos, "relacion"),
             _texto(datos, "objeto"),
         )
-        return {"respuesta": respuesta, "cadena": cadena}
+        return {"respuesta": respuesta, "cadena": con_fuentes(cadena)}
 
     def aprender_relacion(self, datos):
         return aprender_relacion(
@@ -61,6 +65,7 @@ class Apollo(Inteligencia):
             _texto(datos, "objeto"),
             negada=bool(datos.get("negada", False)),
             reemplazar=bool(datos.get("reemplazar", False)),
+            fuente=datos.get("fuente") or USUARIO,
         )
 
     def existe(self, datos):
@@ -68,3 +73,10 @@ class Apollo(Inteligencia):
 
     def sugerir(self, datos):
         return {"sugerencia": sugerir_concepto(_texto(datos, "concepto"))}
+
+    def fuentes(self, datos):
+        concepto = _texto(datos, "concepto")
+        entrada = buscar_entrada(concepto)
+        return {"concepto": entrada["palabra"] if entrada else concepto,
+                "conocido": entrada is not None,
+                "hechos": hechos_con_fuente(concepto) if entrada else []}

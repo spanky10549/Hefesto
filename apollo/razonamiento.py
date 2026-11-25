@@ -19,7 +19,8 @@ from apollo.conocimiento import (
     buscar_inversas,
     buscar_entrada,
     buscar_relaciones,
-    es_negada
+    es_negada,
+    fuente_de
 )
 
 from apollo.lenguaje import (
@@ -346,3 +347,51 @@ def responder(sujeto, relacion, objeto, diccionario=None):
             return SI, cadena + [paso(concepto, verbo, afirmada["objetivo"])]
 
     return NO_SE, []
+
+
+# ==========================================
+# DE DÓNDE SALIÓ CADA PASO
+# ==========================================
+
+def con_fuentes(cadena):
+    """
+    A cada paso de la cadena le agrega "fuente": de dónde salió ese
+    dato ({"fuente", "fecha"}, o None si se aprendió antes de anotarlo).
+
+        raspberry pi → es → computadora        (me lo dijiste tú)
+        computadora → necesita → electricidad  (lo leí en compus.txt)
+    """
+    con = []
+    for p in cadena:
+        relacion = p["relacion"]
+        negada = relacion.startswith("NO ")
+        verbo = relacion[3:] if negada else relacion
+        con.append({**p, "fuente": fuente_de(p["origen"], verbo, p["destino"], negada)})
+    return con
+
+
+def hechos_con_fuente(concepto):
+    """
+    Todo lo que sabe DIRECTO de un concepto, cada cosa con su fuente:
+        [{"tipo": "es", "objeto": "ave", "negada": False, "fuente": {...}}, ...]
+    (Lo heredado no: eso es deducido y se explica con la cadena.)
+    """
+    hechos, vistos = [], set()
+
+    def agregar(tipo, objeto, negada=False):
+        clave = (normalizar_relacion(tipo) if tipo != "sinonimo" else tipo, normalizar_concepto(objeto), negada)
+        if clave in vistos:
+            return
+        vistos.add(clave)
+        hechos.append({"tipo": tipo, "objeto": objeto, "negada": negada,
+                       "fuente": fuente_de(concepto, tipo, objeto, negada)})
+
+    for entrada in entradas_de(concepto):
+        for asociacion in entrada.get("asociaciones", []):
+            agregar("es", asociacion)
+        for sinonimo in entrada.get("sinonimos", []):
+            agregar("sinonimo", sinonimo)
+        for relacion in entrada.get("relaciones", []):
+            agregar(relacion["relacion"], relacion["objetivo"], es_negada(relacion))
+
+    return hechos

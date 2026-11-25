@@ -5,13 +5,13 @@ __pycache__/
 *.tmp
 
 *_backup.*
-
-conversacion.json
 tabris_registro.jsonl
 poseidon_clave.txt
 eter_mapa.json
 sensores_locales.json
+demeter_permisos.json
 respaldos/
 eleuthia_bitacora.jsonl
 cuerno_arado_listas.json
 conversacion_perfil.json
+focus_creador.json

@@ -20,6 +20,7 @@ original (con sus acentos) en las mismas posiciones.
 import re
 
 from minerva.planeador import simple, VERBOS
+from conversacion.traductor import traducir
 
 
 # ==========================================
@@ -185,7 +186,7 @@ def entender(texto, rutinas=()):
         nombre, pasos = cuando
         return {"intencion": "crear_rutina", "nombre": nombre, "pasos": normalizar_pasos(pasos, rutinas)}
 
-    agregar = _despues(r"^(?:agrega|anade|suma|pon)\s+(?:a|en)\s+(?:la\s+)?rutina\s+(.+?)\s*,?\s+que\s+(?:tambien\s+)?(.+)$", texto)
+    agregar = _despues(r"^(?:agrega|a[nñ]ade|suma|pon)\s+(?:a|en)\s+(?:la\s+)?rutina\s+(.+?)\s*,?\s+que\s+(?:tambien\s+)?(.+)$", texto)
     if agregar:
         nombre, pasos = agregar
         return {"intencion": "agregar_a_rutina", "nombre": nombre, "pasos": normalizar_pasos(pasos, rutinas)}
@@ -211,6 +212,32 @@ def entender(texto, rutinas=()):
     if re.match(r"^(cambia (mi|la|tu) clave|nueva clave|cambiar (mi|la) clave)$", t):
         return {"intencion": "cambiar_clave"}
 
+    # ---------- seguir el hilo ----------
+    if re.match(r"^(?:otra vez|otra|de nuevo|hazlo (?:otra vez|de nuevo)|repite|repitelo|una vez mas|"
+                r"y ahora|y ahorita|vuelve a hacerlo|again)$", t):
+        return {"intencion": "otra_vez"}
+
+    # ---------- tu forma de decir las cosas (frases.py) ----------
+    frase = _despues(r"^cuando (?:te )?diga\s+(.+?)\s*,?\s*(?:quiero decir|me refiero a|significa|"
+                     r"es como decir|es lo mismo que|hazme)\s+(.+)$", texto)
+    if frase:
+        return {"intencion": "ensenar_frase", "dicho": frase[0], "significa": frase[1]}
+
+    olvida_frase = _despues(r"^(?:olvida|borra)\s+(?:la frase|lo que significa)\s+(.+)$", texto)
+    if olvida_frase:
+        return {"intencion": "olvidar_frase", "dicho": olvida_frase[0]}
+
+    if re.match(r"^(que frases te ense[nñ]e|mis frases|que frases (?:sabes|conoces|te he ense[nñ]ado))$", t):
+        return {"intencion": "listar_frases"}
+
+    # ---------- reacciones cortas ----------
+    if re.match(r"^((?:ja){2,}j?|(?:je){2,}|(?:ji){2,}|x+d+|lol|jsjs\w*|jajaj\w*)$", t.replace(" ", "")):
+        return {"intencion": "risa"}
+
+    if re.match(r"^(si|ok|okay|va|vale|sale|perfecto|excelente|genial|chido|bien|muy bien|listo|entendido|"
+                r"orale|aja|ya veo|ah ok|ok gracias|va gracias|que bien|super|cool)$", t):
+        return {"intencion": "acuerdo"}
+
     # ---------- de ti ----------
     nombre = _despues(r"^(?:me llamo|mi nombre es|llamame|soy)\s+([a-zñ ]{2,30})$", texto)
     if nombre:
@@ -235,7 +262,7 @@ def entender(texto, rutinas=()):
             and len(t.split()) <= 4 and not re.search(r"\b(es|sabes|puede)\b", t):
         return {"intencion": "saludo"}
 
-    if re.match(r"^(adios|bye|nos vemos|hasta luego|hasta manana|chao|me voy|salir|apagate)\b", t):
+    if re.match(r"^(adios|bye|nos vemos|hasta luego|hasta ma[nñ]ana|chao|me voy|salir|apagate)\b", t):
         return {"intencion": "despedida"}
 
     if re.match(r"^(gracias|muchas gracias|te lo agradezco|thanks|grax)\b", t):
@@ -250,6 +277,12 @@ def entender(texto, rutinas=()):
     if re.match(r"^(que puedes hacer|que sabes hacer|ayuda|ayudame|que haces|en que me ayudas)$", t):
         return {"intencion": "que_puedes_hacer"}
 
+    # ---------- comandos de HEFESTO dichos a tu manera ----------
+    # "¿dónde anda el rover?" → "rover estado"   (ver traductor.py)
+    comando = traducir(texto)
+    if comando:
+        return {"intencion": "hefesto", **comando}
+
     # ---------- cuentas ----------
     cuenta = _despues(r"^(?:cuanto es|cuanto son|calcula|resuelve|cuanto da)\s+(.+)$", texto)
     if cuenta:
@@ -260,6 +293,24 @@ def entender(texto, rutinas=()):
     # ---------- links ----------
     if re.search(r"(https?://|www\.)", t) or re.match(r"^(revisa|checa)\s+(este|el)\s+(link|enlace|mensaje)", t):
         return {"intencion": "revisar_links", "texto": texto}
+
+    # ---------- de dónde sabe algo (fuentes) ----------
+    de_donde = _despues(
+        r"^(?:de donde sacaste|quien te dijo|como sabes|por que sabes|donde aprendiste|donde leiste|"
+        r"de donde sabes|quien te ense[nñ]o|de donde aprendiste)\s+que\s+(.+)$", texto)
+    if de_donde:
+        return {"intencion": "de_donde", "frase": de_donde[0]}
+
+    if re.match(r"^(?:y\s+)?(de donde lo sacaste|de donde sacaste eso|quien te lo dijo|quien te dijo eso|"
+                r"como lo sabes|como sabes eso|por que lo sabes|de donde viene eso|cual es tu fuente|"
+                r"quien te lo ense[nñ]o|donde lo aprendiste|donde lo leiste|y eso de donde)$", t):
+        return {"intencion": "de_donde", "frase": None}      # sobre lo último que dije
+
+    fuentes = _despues(
+        r"^(?:(?:tus\s+)?fuentes|de donde sabes lo que sabes|de donde viene lo que sabes|"
+        r"quien te ense[nñ]o|quienes te ense[nñ]aron|de donde aprendiste)\s+(?:del|de|sobre|lo de|acerca de)\s+(.+)$", texto)
+    if fuentes:
+        return {"intencion": "fuentes", "concepto": sin_articulo(fuentes[0])}
 
     # ---------- conocimiento ----------
     aprende = _despues(r"^(?:aprende que|apunta que|recuerda que|toma nota de que)\s+(.+)$", texto)

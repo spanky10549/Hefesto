@@ -41,6 +41,8 @@ from apollo.lenguaje import (
 )
 
 from apollo.lector import leer_archivo, guardar_hechos
+from apollo.fuentes import documento as fuente_documento, describir as describir_fuente
+from apollo.razonamiento import con_fuentes, hechos_con_fuente
 from calculo.aritmetica import extraer_operacion
 from apollo.lenguaje import quitar_acentos, quitar_signos
 from gaia import crear_ecosistema, OK, RECHAZADO
@@ -81,6 +83,18 @@ from apollo.razonamiento import (
 # Se crea hasta que se necesita (no al importar este archivo), para que
 # las pruebas no escriban el registro de TABRIS en la carpeta real.
 _ecosistema = None
+
+# Lo que devuelve procesar() (ver preparar_hefesto)
+SALIR = "salir"
+NO_ENTENDI = "no_entendi"
+
+
+def usar_ecosistema(gaia):
+    """FOCUS le presta su GAIA a HEFESTO, para que los dos usen la misma."""
+    global _ecosistema
+    _ecosistema = gaia
+    gaia.suscribir("sensor_detectado", avisar_sensor_detectado)
+    gaia.suscribir("sensor_perdido", avisar_sensor_perdido)
 
 
 def ecosistema():
@@ -2005,7 +2019,8 @@ def leer_documento(texto_ruta):
         print("HEFESTO: Va, no guardé nada.")
         return
 
-    resultados = guardar_hechos(elegidos)
+    # Cada hecho queda anotado con el documento de donde salió.
+    resultados = guardar_hechos(elegidos, fuente=fuente_documento(os.path.basename(ruta)))
 
     nuevos = sum(1 for _, r in resultados if r["estado"] in ESTADOS_NUEVOS)
     sabidos = sum(1 for _, r in resultados if r["estado"] == "ya_sabia")
@@ -2210,12 +2225,39 @@ def negacion_de_categoria(frase):
 
 
 def mostrar_cadena(cadena, sangria="  "):
-    """Imprime los pasos de un razonamiento: a → relación → b."""
-    for paso in cadena:
+    """
+    Imprime los pasos de un razonamiento, cada uno con de dónde lo sacó:
+        pingüino → es → ave   (me lo dijiste tú hoy)
+    """
+    for paso in con_fuentes(cadena):
         print(
             f"{sangria}{paso['origen']} → "
-            f"{paso['relacion']} → {paso['destino']}"
+            f"{paso['relacion']} → {paso['destino']}   ({describir_fuente(paso['fuente'])})"
         )
+
+
+def mostrar_fuentes(concepto):
+    """'fuentes de pingüino': lo que sé de él y de dónde salió cada cosa."""
+    entrada = buscar_entrada(concepto)
+    if entrada is None:
+        print(f"HEFESTO: No sé nada de {concepto}.")
+        return
+
+    hechos = hechos_con_fuente(concepto)
+    if not hechos:
+        print(f"HEFESTO: Conozco {entrada['palabra']}, pero no sé nada directo de él.")
+        return
+
+    print(f"HEFESTO: Lo que sé de {entrada['palabra']} y de dónde lo saqué:")
+    for hecho in hechos:
+        print(f"  {describir_hecho_guardado(entrada['palabra'], hecho)}   ({describir_fuente(hecho['fuente'])})")
+
+
+def describir_hecho_guardado(sujeto, hecho):
+    """{"tipo": "puede", "objeto": "volar", "negada": True} → 'pingüino NO puede volar'"""
+    if hecho["tipo"] == "sinonimo":
+        return f"{sujeto} también se llama {hecho['objeto']}"
+    return f"{sujeto} {'NO ' if hecho['negada'] else ''}{hecho['tipo']} {hecho['objeto']}"
 
 
 def parsear_pregunta_inversa(texto):
@@ -2303,6 +2345,7 @@ HEFESTO: Esto es lo que sé hacer:
   PREGUNTAR
     define <algo>  /  qué es <algo>   te lo explico con mis palabras
     qué sabes de <algo>
+    fuentes de <algo>        lo que sé de algo y de dónde salió cada cosa
     qué mide / controla / usa / necesita / produce ... <algo>
     con qué se comunica <algo>
     camino <origen> <destino>
@@ -2440,7 +2483,11 @@ def mostrar_ayuda():
 # INICIAR HEFESTO
 # ==========================================
 
-def iniciar_hefesto():
+def preparar_hefesto():
+    """
+    Arranca HEFESTO (modelo, memoria, tema de la conversación) y devuelve
+    la función procesar(comando). No pide nada por teclado.
+    """
 
     print("\n================================")
     print("            HEFESTO")
@@ -2523,17 +2570,27 @@ def iniciar_hefesto():
             f"Podemos seguir, o dime 'cambiemos de tema'."
         )
 
-    while True:
+    # ======================================
+    # PROCESAR UN COMANDO
+    # ======================================
+    #
+    # Todo lo que HEFESTO sabe hacer con un comando vive aquí adentro.
+    # Antes era el cuerpo del "while True"; ahora es una función para que
+    # FOCUS también pueda pasarle comandos (conversacion/puente.py).
+    #
+    # Devuelve:
+    #     SALIR        si pidieron apagar
+    #     NO_ENTENDI   si no supo qué hacer con el comando
+    #     None         en cualquier otro caso (ya respondió con print)
 
-        try:
-            comando = input("\nTú: ").strip()
+    def procesar(comando):
+        # "nonlocal": estas variables son de preparar_hefesto, no nuevas.
+        nonlocal tema_actual, ultima_plantilla
 
-        except (KeyboardInterrupt, EOFError):
-            print("\nHEFESTO: Apagando sistema...")
-            break
-
+        comando = (comando or "").strip()
         if not comando:
-            continue
+            return None
+
 
         # ======================================
         # CONTEXTO DE LA CONVERSACIÓN
@@ -2546,7 +2603,7 @@ def iniciar_hefesto():
                 "HEFESTO: ¿De qué estamos hablando? "
                 "Todavía no sé a qué te refieres."
             )
-            continue
+            return NO_ENTENDI
 
         if uso_contexto:
             print(f"HEFESTO: (Entiendo: {comando})")
@@ -2574,7 +2631,7 @@ def iniciar_hefesto():
         if comando_normalizado == "salir":
 
             print("HEFESTO: Apagando sistema...")
-            break
+            return SALIR
 
         # ======================================
         # ESTADO
@@ -2903,6 +2960,10 @@ def iniciar_hefesto():
         # LEER DOCUMENTOS
         # ======================================
 
+        elif comando_simple(comando).startswith("fuentes de "):
+
+            mostrar_fuentes(comando.strip()[len("fuentes de "):].strip())
+
         elif comando_normalizado.startswith("lee "):
 
             ruta = re.sub(
@@ -2938,7 +2999,7 @@ def iniciar_hefesto():
 
             if not contenido:
                 print("HEFESTO: ¿Qué quieres que recuerde?")
-                continue
+                return None
 
             conocimiento = analizar_conocimiento(contenido)
             guardar_conocimiento(conocimiento)
@@ -2958,7 +3019,7 @@ def iniciar_hefesto():
                     "Usa: actualiza | tipo | tema | "
                     "contenido_anterior | contenido_nuevo"
                 )
-                continue
+                return None
 
             tipo = partes[1].strip()
             tema = partes[2].strip()
@@ -3047,7 +3108,7 @@ def iniciar_hefesto():
                             "HEFESTO: No pude identificar "
                             "una asociación o relación."
                         )
-                        continue
+                        return None
 
                     palabra = partes[0].strip()
                     asociacion = partes[1].strip()
@@ -3555,7 +3616,7 @@ def iniciar_hefesto():
                 sujeto=sujeto, relacion=verbo, objeto=objeto
             )
             if datos is None:
-                continue
+                return None
 
             respuesta, cadena = datos["respuesta"], datos["cadena"]
 
@@ -3589,6 +3650,26 @@ def iniciar_hefesto():
                 "HEFESTO: Todavía no sé procesar ese comando. "
                 "Escribe 'ayuda' para ver lo que sé hacer."
             )
+            return NO_ENTENDI
+
+    return procesar
+
+
+def iniciar_hefesto():
+    """El modo de comandos exactos: python HEFESTO.py"""
+    procesar = preparar_hefesto()
+
+    while True:
+
+        try:
+            comando = input("\nTú: ").strip()
+
+        except (KeyboardInterrupt, EOFError):
+            print("\nHEFESTO: Apagando sistema...")
+            break
+
+        if procesar(comando) == SALIR:
+            break
 
 
 if __name__ == "__main__":

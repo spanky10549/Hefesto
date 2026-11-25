@@ -154,7 +154,7 @@ def test_actualiza_base_vieja_sin_perder_nada(carpeta):
     conexion = sqlite3.connect(carpeta / "diccionario_hefesto.db")
     version = conexion.execute("PRAGMA user_version").fetchone()[0]
     conexion.close()
-    assert version == 2
+    assert version == 3          # 3: con la tabla de fuentes
 
 
 # ==========================================
